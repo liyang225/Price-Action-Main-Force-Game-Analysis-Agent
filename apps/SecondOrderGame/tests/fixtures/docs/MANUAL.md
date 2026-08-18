@@ -1,0 +1,16 @@
+- prompt_engine/通用/参与者识别.txt
+- prompt_engine/通用/人设与思维方式.txt
+- prompt_engine/通用/主体目的分析.txt
+- prompt_engine/通用/情绪周期判断.txt
+- prompt_engine/通用/新闻情绪评分.txt
+- prompt_engine/通用/情景应对.txt
+- prompt_engine/主力/冰点.txt
+- prompt_engine/主力/启动.txt
+- prompt_engine/主力/发酵.txt
+- prompt_engine/主力/高潮.txt
+- prompt_engine/主力/退潮.txt
+- prompt_engine/散户/冰点.txt
+- prompt_engine/散户/启动.txt
+- prompt_engine/散户/发酵.txt
+- prompt_engine/散户/高潮.txt
+- prompt_engine/散户/退潮.txt

@@ -1,0 +1,42 @@
+version: 2
+
+opening_distribution:
+  # outcome 名称为兼容既有闸门契约而保留；实际含义分别是下一完整
+  # K_120M 时段低于预期、符合预期、超预期强。
+  ranges:
+    - outcome: gap_down
+      lower_bound: null
+      upper_bound: -0.01
+    - outcome: near_reference
+      lower_bound: -0.01
+      upper_bound: 0.01
+    - outcome: gap_up
+      lower_bound: 0.01
+      upper_bound: null
+  min_day_blocks: 30
+  bootstrap_iterations: 500
+  prior_strength: 3.0
+  random_seed: 20260812
+  priors:
+    intraday_next_bar:
+      gap_down: 0.25
+      near_reference: 0.50
+      gap_up: 0.25
+    overnight_next_bar:
+      gap_down: 0.25
+      near_reference: 0.50
+      gap_up: 0.25
+
+first_passage:
+  min_samples: 20
+  volatility_lookback: 10
+  recent_return_lookback: 5
+  volatility_quantiles: [0.3333333333333333, 0.6666666666666666]
+  turnover_quantiles: [0.3333333333333333, 0.6666666666666666]
+  recent_return_edges: [-0.01, 0.01]
+  degradation_order:
+    - recent_return
+    - cycle_state
+    - turnover_quantile
+  bootstrap_iterations: 500
+  random_seed: 20260812

@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+.pytest_cache/
+.hypothesis/
+.coverage*
+htmlcov/
+build/
+dist/
+.venv/
+venv/
+
+# IDE and agent state
+.idea/
+.vscode/
+.workbuddy/
+.codex*/
+**/.scratch/
+**/.private-*/
+**/_design_review/
+**/deliverables/
+*.swp
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+**/config/settings.json
+**/config/settings.local.json
+**/config/exception_state.json
+**/config/secret.key
+
+# Runtime and personal data
+**/runtime/
+**/logs/
+**/records/
+!apps/PA_Agent/pa_agent/records/
+!apps/PA_Agent/pa_agent/records/**
+**/trade_records/
+**/history analysis/
+**/analysis_history/
+**/.pytest_tmp/
+**/experience/
+*.db
+*.sqlite
+*.sqlite3
+*.log
+*.patch
+*.raw
+
+# OS files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,23 @@
+{
+  "schema_version": "1",
+  "rule_hash": "b36718dcbc61cedbacd982c98ded6c09331274ae2c0951c96e84580fc455bb8f",
+  "fixture_sha256": "043f46ed6a4831f44795f3fac056cbd9168ad0954ca9c15f0576a37ec2e63916",
+  "fixture_sector_codes": [
+    "SH.LIST0002",
+    "SH.LIST0006",
+    "SH.LIST0026",
+    "SH.LIST0047",
+    "SH.LIST0055"
+  ],
+  "fixture_row_count": 8000,
+  "expected_counts": {
+    "启动": 225,
+    "发酵": 67,
+    "冰点": 145,
+    "退潮": 6,
+    "高潮": 10
+  },
+  "unlabeled_count": 7397,
+  "data_insufficient_count": 150,
+  "multi_hit_count": 0
+}

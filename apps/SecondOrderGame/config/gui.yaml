@@ -1,0 +1,7 @@
+version: 1
+
+# 新手模式只展示口语信心，不暴露 Dirichlet ESS 公式。
+confidence_alpha:
+  弱: 3.0
+  中: 8.0
+  强: 24.0

@@ -1,0 +1,28 @@
+NOTICE
+
+This repository combines the following components:
+
+1. SecondOrderGame
+   Copyright (c) 2026 SecondOrderGame contributors.
+
+2. PA Agent 6.24
+   Copyright (C) 2026 PA Agent Contributors.
+   Licensed under the GNU Affero General Public License, version 3
+   or any later version (AGPL-3.0-or-later).
+
+Unless a file or subcomponent states otherwise, the combined project is
+distributed under the GNU Affero General Public License, version 3 or any
+later version. The original copyright notices and license notices for each
+component must be preserved.
+
+Third-party components
+----------------------
+
+This repository may include or depend on third-party components, including
+the Futu API. Those components remain subject to their own copyright notices
+and license terms. In particular, Futu API files identify Futu, Inc. and
+Apache License 2.0 terms; those notices and terms must be retained wherever
+the files are redistributed.
+
+This NOTICE file is informational and does not replace the applicable
+LICENSE files or the license notices included with individual components.

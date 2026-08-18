@@ -1,0 +1,11 @@
+{
+  "_comment": "飞书配置已合并到 config/settings.json 的 feishu 段。此文件仅作字段说明参考。",
+  "_comment2": "请在程序菜单「飞书发送通知设置」中填写，或编辑 settings.json。",
+
+  "enabled": true,
+  "webhook_url": "https://open.feishu.cn/open-apis/bot/v2/hook/你的机器人Token",
+  "secret": "",
+  "app_id": "",
+  "app_secret": "",
+  "notify_on_order_only": true
+}

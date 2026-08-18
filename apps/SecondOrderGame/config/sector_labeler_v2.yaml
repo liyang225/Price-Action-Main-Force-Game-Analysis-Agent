@@ -1,0 +1,14 @@
+version: 1
+required_fields:
+  - limit_streak
+  - is_rise_limit
+  - is_fall_limit
+  - volume
+  - previous_five_day_average_volume
+cutover:
+  required_history_days_per_sector: 5
+  required_stable_trading_days: 3
+rule_hash:
+  algorithm: sha256
+  scope: this_file
+  store_with_every_label: true

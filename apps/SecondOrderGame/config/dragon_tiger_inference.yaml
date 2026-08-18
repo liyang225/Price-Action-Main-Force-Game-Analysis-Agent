@@ -1,0 +1,6 @@
+version: 1
+observation_states:
+  institution_net_buy: 启动
+  institution_net_sell: 退潮
+  hot_money_net_buy: 发酵
+  hot_money_net_sell: 退潮

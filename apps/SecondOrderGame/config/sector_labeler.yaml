@@ -1,0 +1,220 @@
+# 板块层事后标注器规则（v1，2026-08-12 冻结）
+#
+# ⚠ 标注器是定义，不是真相（ADR-0007）。本文件把抽象概念「高潮」映射成可程序
+# 验证的条件，这个映射是人为选择。一旦冻结，不能为了让准确率好看而修改。
+#
+# ⚠ 改任何阈值 = 作废全部已积累的 C 矩阵计数。流程：
+#     1. 新建 ADR 说明修改原因
+#     2. 递增 version，重算 rule_hash
+#     3. 全量重标历史
+#     4. 重建 C 计数
+#   未完成重算前禁止新旧计数混用。
+#
+# 冻结证据见 .scratch/sector-labeler-validation/rule_manifest.json：75 条五阶段
+# 盲标覆盖 12 个板块和多种市场环境。规则与人工一致率为 56%，主要混淆发生在
+# 启动/发酵、冰点/退潮相邻阶段；未为了提高样本内一致率而回拟合阈值。
+
+version: 1
+
+# ---------------------------------------------------------------------------
+# 核心设计差异（相对个股层）
+# ---------------------------------------------------------------------------
+# 1. 前向收益用绝对值，不用超额（板块本身就是基准）
+# 2. 引入"状态持续性"特征（如连续 N 日缩量 → 冰点）
+# 3. 窗口更长（板块比个股平滑，需要更长周期确认转折）
+# 4. 判定对象是"周期位置"而非"主力意图"
+
+# ---------------------------------------------------------------------------
+# 前向收益口径
+# ---------------------------------------------------------------------------
+# 板块用绝对收益（无需减基准），前向窗口 10 日（板块转折比个股慢）。
+#
+# 为什么不用 5 日：板块由多只个股组成，单日噪音被平滑，转折确认需要更长窗口。
+# 实测时若发现 10 日过长（覆盖率过低），可降至 7 日，但不应低于个股的 5 日。
+forward_return:
+  feature: forward_absolute_return
+  window_bars: 10                 # 十个交易日
+
+# 基准缺失不适用板块层（板块指数本身就是基准）
+missing_benchmark_policy: not_applicable
+
+# ---------------------------------------------------------------------------
+# 独立性声明
+# ---------------------------------------------------------------------------
+# 板块标注器有独立的代码、规则配置、规则哈希和输出，不读取个股标签。
+# 它只读板块指数自身的 OHLCV，不读情绪指数（sentiment.yaml 的 0-100 数值）。
+independence:
+  may_read_sector_sentiment_index: false    # ⚠ 陷阱：用指数切五段会作废混淆矩阵
+  may_read_stock_labels: false
+  may_read_stock_ohlcv: false
+
+# v1 只有完整板块指数 OHLCV。发酵在本版本中只能表示已确认的价格趋势，
+# 不声称已经验证成分股层面的赚钱效应扩散；该证据属于 v2 影子标注器。
+state_metadata:
+  冰点:
+    evidence_mode: ohlcv
+    expansion_verified: false
+  启动:
+    evidence_mode: ohlcv
+    expansion_verified: false
+  发酵:
+    evidence_mode: price_trend_proxy
+    expansion_verified: false
+  高潮:
+    evidence_mode: ohlcv
+    expansion_verified: false
+  退潮:
+    evidence_mode: ohlcv
+    expansion_verified: false
+
+# v2 成分股扩散证据先影子运行。达到门槛后由系统自动全量重标并原子切换，
+# 不把 v1/v2 标签或 C 矩阵计数混在一起。
+shadow_v2:
+  enabled: true
+  cutover_mode: automatic
+  # These are data-pipeline readiness gates, not manual-label quotas. A
+  # historical backfill can satisfy the windows without waiting in real time.
+  # A qualifying day already has every required v2 field, so no separate
+  # completeness-rate threshold is configured.
+  required_history_days_per_sector: 5
+  required_stable_trading_days: 3
+  relabel_history_on_cutover: true
+  rebuild_independent_c_counts: true
+  atomic_switch: true
+  require_independent_rule_hash: true
+
+# ---------------------------------------------------------------------------
+# 特征定义
+# ---------------------------------------------------------------------------
+features:
+  return_1d: "当日收益"
+  forward_return: "前向十日绝对收益"
+  volume_ratio_20: "成交量 / 前 20 日成交量中位数"
+  volatility_20: "前 20 日收益率标准差"
+  recent_trend_5d: "前 5 日累计收益（判断进入状态前的走势）"
+  consecutive_down_days: "连续下跌日数（最多回溯 20 日）"
+  consecutive_shrink_days: "连续缩量日数（量 < 20 日中位数，最多回溯 20 日）"
+  price_position_20: "(close - low_20) / (high_20 - low_20)，当前价格在 20 日区间的位置"
+  turnover_rate: "换手率（若富途接口有）"
+
+lookback:
+  range_bars: 20
+  volume_median_bars: 20
+  volatility_bars: 20
+
+# 零振幅 K 线（板块指数极少出现，但需定义）
+zero_range_bar:
+  treat_as: neutral
+  skip_labeling: true
+
+# 停牌不适用板块层（板块指数是加权指数，个股停牌不停板块）
+suspension_policy: not_applicable
+
+# ---------------------------------------------------------------------------
+# 五档情绪周期规则（v1 冻结阈值）
+# ---------------------------------------------------------------------------
+# 排序依据：按情绪从极冷到极热的自然顺序排列，优先级按形态特异性。
+#
+# 特异性最高的两端：
+#   - 冰点：要求连续多日缩量 + 低位横盘 + 前向开始反弹（底部特征）
+#   - 高潮：要求爆量 + 暴涨 + 高位 + 前向可能回落（顶部特征）
+#
+# 中间状态：
+#   - 启动：低位反转，趋势尚待确认
+#   - 发酵：趋势已确认；v1 只用价格趋势代理，v2 才验证赚钱效应扩散
+#   - 退潮：方向性明确向下但未到冰点
+thresholds:
+  冰点:
+    # 底部特征：低位 + 长期缩量 + 前向开始反弹
+    price_position_20_max: 0.30          # 价格在 20 日区间下 30%
+    consecutive_shrink_days_min: 5       # 连续 5 日缩量
+    recent_trend_5d_max: 0.02            # 进入前 5 日弱势或横盘
+    forward_min: 0.03                     # 前向 10 日开始反弹（>= 3%）
+    volume_ratio_max: 0.80               # 当日仍缩量
+
+  启动:
+    # 低位反转刚出现，之前五日趋势尚未确立，后续开始延续
+    return_1d_min: 0.005                  # 当日微涨或平
+    forward_min: 0.03                     # 前向 10 日开始延续
+    volume_ratio_min: 0.90
+    volume_ratio_max: 1.80               # 温和放量，非爆量
+    price_position_20_min: 0.40          # 摆脱底部区域
+    consecutive_down_days_max: 1         # 近期无连续下跌
+    recent_trend_5d_max: 0.03            # 进入前趋势尚未确认
+
+  发酵:
+    # v1 价格趋势代理：进入前趋势已确认且后续继续正向。
+    # 成分股广度、连板和涨跌停扩散数据在 v2 影子运行时再加入。
+    return_1d_min: 0.005
+    forward_min: 0.05
+    volume_ratio_min: 0.90
+    volume_ratio_max: 1.80
+    price_position_20_min: 0.55
+    consecutive_down_days_max: 1
+    recent_trend_5d_min: 0.03
+
+  高潮:
+    # 顶部特征：高位 + 暴涨 + 爆量 + 前向可能转负
+    return_1d_min: 0.03                   # 当日大涨（>= 3%）
+    volume_ratio_min: 1.80               # 爆量
+    price_position_20_min: 0.70          # 价格在 20 日区间上 30%
+    forward_max: 0.02                     # 前向 10 日涨幅收窄或转负（<= 2%）
+    recent_trend_5d_min: 0.08            # 进入前 5 日已大涨（>= 8%）
+
+  退潮:
+    # 急跌 + 恐慌放量 + 前向负向
+    return_1d_max: -0.02                  # 当日跌（<= -2%）
+    forward_max: -0.04                    # 前向 10 日跌幅 >= 4%
+    volume_ratio_min: 1.20               # 放量
+    price_position_20_max: 0.60          # 跌离高位
+    consecutive_down_days_min: 2         # 连续下跌至少 2 日
+
+# ---------------------------------------------------------------------------
+# 优先级与互斥
+# ---------------------------------------------------------------------------
+# 按形态特异性排序：两极（冰点、高潮）特征最特异，优先判定。
+# 发酵次之，启动、退潮为方向性状态。分歧是正交的板块共识状态，不是标签。
+#
+# 验证时同时记录规则级多命中率；最终标签始终按此优先级唯一选取。
+priority: [冰点, 高潮, 发酵, 退潮, 启动]
+
+# ---------------------------------------------------------------------------
+# 标签基数
+# ---------------------------------------------------------------------------
+# 每个板块每个交易日只输出一个情绪周期位置。
+cardinality:
+  labels_per_sector_day: 1
+  allow_fractional_counts: false
+
+# ---------------------------------------------------------------------------
+# 无标签交易日
+# ---------------------------------------------------------------------------
+# 真正未命中的交易日输出无标签，不更新 C 计数，保存行级特征供日后重标。
+# 缺少回看窗口、前视窗口或必需 OHLCV 字段时，输出 data_insufficient，
+# 与规则未命中严格区分。
+#
+# 19,200 个历史板块日中，当前高置信规则标注 1,263 日，数据不足 360 日，
+# 合格日覆盖率 6.70%。低覆盖是允许无标签的结果，不以中性标签补齐。
+unlabeled:
+  fallback_to_neutral: false             # 不兜底为任何周期状态
+  update_c_counts: false
+  persist_row_features: true
+
+# 覆盖率监控。2% 低于冻结样本中单板块最低历史覆盖率 3.76%，用于发现
+# 数据管道或规则执行退化，不把 25% 这类与稀疏高置信规则不符的值当门槛。
+coverage_monitor:
+  window_trading_days: 60
+  pool: per_sector
+  alert_threshold: 0.02
+  consecutive_windows_to_escalate: 2
+  on_alert: freeze_and_escalate
+
+# ---------------------------------------------------------------------------
+# 规则哈希
+# ---------------------------------------------------------------------------
+rule_hash:
+  algorithm: sha256
+  scope: this_file
+  store_with_every_label: true
+  # 对 frozen_hash 置空后的完整规范化 YAML 计算，避免自引用。
+  frozen_hash: b36718dcbc61cedbacd982c98ded6c09331274ae2c0951c96e84580fc455bb8f

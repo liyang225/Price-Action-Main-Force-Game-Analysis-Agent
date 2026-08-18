@@ -1,0 +1,482 @@
+================================================================
+  PA Agent 智能体部署方法（Mac 版）
+  适用环境：macOS 12+ (Monterey 及以上) + Python 3.11+ 已安装
+================================================================
+
+【说明】
+本文档供自动化 Agent 按步骤执行部署。每一步都有明确的命令和验收条件。
+遇到问题时按"故障排查"章节处理。最后必须通过验收环节才能交付给用户。
+
+【重要：Mac 与 Windows 的核心差异】
+1. MT5（MetaTrader 5）没有 macOS 原生版本，Mac 版使用 TradingView 作为默认数据源
+2. pywin32 / MetaTrader5 包不支持 macOS，无需安装
+3. 不需要 bat 文件，Mac 用 .command 文件（双击即可运行）
+4. pyproject.toml 中 MetaTrader5 和 pywin32 标记了 sys_platform == 'win32'，macOS 下 pip 会自动跳过
+5. 项目代码已做了平台兼容：数据源通过 factory.py 工厂创建，Mac 下默认使用 TradingView
+
+【重要：项目路径】
+本文档中 PROJECT_ROOT 代表 PA_Agent 项目的根目录。
+执行前必须先确定项目实际路径，后续所有命令中的 PROJECT_ROOT 都替换为实际路径。
+例如：用户项目在 ~/Desktop/PA_Agent，则 PROJECT_ROOT = ~/Desktop/PA_Agent
+      将 PROJECT_ROOT 设为当前 PA_Agent 项目根目录
+
+确定方法：找到项目中存在 pa_agent/main.py 和 pyproject.toml 的那个目录，就是 PROJECT_ROOT。
+
+【重要：不使用虚拟环境】
+本方案直接将依赖安装到系统 Python，不创建虚拟环境。
+原因：用户双击 .command 文件运行程序，虚拟环境会增加不必要的复杂度和闪退风险。
+只要系统 Python 是专门给本程序用的，就不会有冲突问题。
+
+【重要：Shell 说明】
+本文档所有命令均使用 bash/zsh 语法（macOS 默认终端）。
+
+================================================================
+  第零步：确认当前系统是 macOS
+================================================================
+
+执行以下命令：
+
+  uname -s
+
+预期输出：Darwin
+
+若输出不是 Darwin，说明当前不是 macOS，请使用 Windows 版部署文档。
+
+================================================================
+  第一步：确认前置条件
+================================================================
+
+执行以下命令，确认 Python 已就绪：
+
+  python3 --version
+
+预期输出：Python 3.11.x 或更高版本（3.12、3.13 均可）
+
+若输出"command not found: python3"，说明 Python 未安装。
+解决方法：
+
+  方案 A — 官方安装包（推荐）：
+    访问 https://www.python.org/downloads/ 下载 Python 3.11+ 安装包
+    安装时勾选"Install for all users"
+
+  方案 B — Homebrew：
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    brew install python@3.13
+
+若 python3 存在但 python 不存在，创建软链接：
+  sudo ln -sf $(which python3) /usr/local/bin/python
+
+================================================================
+  第二步：升级 pip
+================================================================
+
+  python3 -m pip install --upgrade pip -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn
+
+验收：
+
+  python3 -c "import pip; print(pip.__version__)"
+
+预期输出：pip 版本号 24.x 或更高
+
+【故障排查】
+- 若 pip 升级网络超时，换阿里云源：
+    python3 -m pip install --upgrade pip -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com
+
+================================================================
+  第三步：安装项目依赖
+================================================================
+
+  cd PROJECT_ROOT
+  pip3 install -e . -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn
+
+说明：
+- -e . 表示以开发模式安装，代码改动即时生效
+- -i 指定清华源，避免默认源网络问题
+- macOS 下 pip 会自动跳过 pyproject.toml 中标记 sys_platform == 'win32' 的包：
+  MetaTrader5、pywin32（这两个包不支持 macOS，不需要安装）
+- 实际安装的依赖：PyQt6, pyqtgraph, numpy, pandas, openai, tiktoken,
+  jsonschema, pydantic, tvDatafeed, cryptography, akshare, baostock, curl_cffi
+
+  注意：tvDatafeed 是 TradingView 数据源的核心依赖，
+  从 GitHub 安装（git+https），网络环境需能访问 GitHub。
+
+验收：逐个检查核心包是否可导入
+
+  python3 -c "import PyQt6; print('PyQt6 OK')"
+  python3 -c "import pyqtgraph; print('pyqtgraph OK')"
+  python3 -c "import numpy; print('numpy OK')"
+  python3 -c "import pandas; print('pandas OK')"
+  python3 -c "import openai; print('openai OK')"
+  python3 -c "import tiktoken; print('tiktoken OK')"
+  python3 -c "import jsonschema; print('jsonschema OK')"
+  python3 -c "import pydantic; print('pydantic OK')"
+  python3 -c "import cryptography; print('cryptography OK')"
+  python3 -c "from tvDatafeed import TvDatafeed; print('tvDatafeed OK')"
+  python3 -c "import akshare; print('akshare OK')"
+  python3 -c "import baostock; print('baostock OK')"
+  python3 -c "import curl_cffi; print('curl_cffi OK')"
+
+预期输出：每行均显示 "xxx OK"
+
+注意：Mac 上不需要检查 MetaTrader5 和 win32crypt。
+
+【故障排查】
+
+问题 1：pip install 网络超时 / ConnectionError
+解决：
+  方案 A - 换清华源（已在上面命令中使用）：
+    pip3 install -e . -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn
+
+  方案 B - 换阿里云源：
+    pip3 install -e . -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com
+
+  方案 C - 逐个安装（某个包卡住时单独装）：
+    pip3 install PyQt6 -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn
+    pip3 install pyqtgraph -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn
+    ... 依次安装每个包
+
+问题 2：PyQt6 安装后报 "DLL load failed" 或 import 失败
+解决：
+  macOS 上 PyQt6 依赖较新版本的 macOS 和 OpenGL：
+  - 确认 macOS 版本 >= 12.0 (Monterey)
+  - 若使用 Homebrew Python，尝试：
+    brew reinstall python@3.13
+    pip3 install --force-reinstall PyQt6
+  - 若仍然失败，安装 Qt 依赖：
+    brew install qt
+
+问题 3：tvDatafeed 安装失败（git clone 超时 / 网络不可达）
+说明：tvDatafeed 是 TradingView 数据源的核心依赖，
+  从 GitHub 安装（git+https://github.com/rongardF/tvdatafeed.git），
+  国内网络可能无法直接克隆。
+解决：
+  方案 A — 配置 git 代理（如果已有代理）：
+    git config --global http.proxy http://127.0.0.1:7890
+    git config --global https.proxy http://127.0.0.1:7890
+    pip3 install git+https://github.com/rongardF/tvdatafeed.git
+
+  方案 B — 手动下载 + 本地安装：
+    浏览器打开 https://github.com/rongardF/tvdatafeed
+    → Code → Download ZIP → 解压到本地
+    → cd 到解压目录 → pip3 install .
+
+  方案 C — 使用 gitee 镜像（如存在）：
+    搜索 gitee 上是否有 tvdatafeed 镜像仓库，克隆后用 pip3 install . 安装。
+
+问题 3.5：tvDatafeed 安装后，TradingView 数据拉取全部报 "Connection to remote host was lost"
+原因：tvDatafeed 2.1.0 存在一个已知 bug —— 其 WebSocket headers 参数传的是 JSON 字符串
+  而非 Python dict，导致 websocket-client ≥1.8 版本拒绝握手（HTTP 400）。
+解决：找到 tvDatafeed 安装目录下的 main.py，修改一行代码。
+
+  定位文件：
+    python3 -c "import tvDatafeed; import os; print(os.path.dirname(tvDatafeed.__file__))"
+  输出类似：/opt/homebrew/lib/python3.13/site-packages/tvDatafeed
+
+  编辑该目录下的 main.py，找到第 35 行附近的：
+    __ws_headers = json.dumps({"Origin": "https://data.tradingview.com"})
+  改为：
+    __ws_headers = {"Origin": "https://data.tradingview.com"}
+
+  改完后验证（使用 daily interval，避免分钟线超时干扰验证结果）：
+    python3 -c "from tvDatafeed import TvDatafeed, Interval; df = TvDatafeed().get_hist('XAUUSD', 'OANDA', Interval.in_daily, n_bars=2); print('OK:', len(df), 'bars')"
+  预期输出：OK: 2 bars
+
+  说明：此 bug 仅在 websocket-client ≥1.8 时触发。如果你用的是旧版 websocket-client，
+  可能不受影响，但建议一并修复以兼容未来升级。
+
+问题 3.6：tvDatafeed 安装后数据拉取变慢，切换品种/周期要等 40 秒甚至更久
+原因：tvDatafeed 2.1.0 的 get_hist() 在每次调用时都会新建 WebSocket 连接，但从不关闭
+  上一个连接——持续使用会积累大量半开放连接，触发 TradingView 速率限制。
+  PA_Agent 项目已在 pa_agent/data/tradingview.py 中对此进行修复（无需改 tvDatafeed 源码）：
+  1. 每次 get_hist() 调用完成后自动关闭 socket，不再泄漏连接
+  2. 切换品种/周期时主动关闭当前 socket，立即中断挂起的请求（不再排队等超时）
+  3. 单次请求超时从 15 秒缩短至 10 秒，且不再自动重试（避免超时翻倍）
+  这些修复已包含在项目代码中，pip install -e . 后即生效，无需额外操作。
+
+  注意：即使有上述修复，TradingView 匿名（nologin）模式下仍受 IP 速率限制。
+  若经常拉取失败，最有效的解决方案是在 GUI 设置中填入 TradingView 账号用于登录。
+
+问题 4：pyqtgraph 与 PyQt6 版本不兼容
+解决：指定兼容版本：
+    pip3 install pyqtgraph>=0.13 -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn
+
+问题 5：numpy 版本冲突
+解决：
+    pip3 install numpy>=1.26 -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn
+
+问题 6：macOS 上 PyQt6 窗口无法显示 / 黑屏
+解决：
+  - 确认没有设置 QT_QPA_PLATFORM 环境变量（macOS 上不需要）
+  - 若通过 SSH 远程运行，需要 X11 转发或 VNC，不支持 headless
+  - 若使用 macOS 安全策略阻止了 Python 打开窗口：
+    系统偏好设置 → 安全性与隐私 → 允许从以下位置下载的 App → 允许 Python
+
+================================================================
+  第四步：修改项目代码适配 macOS
+================================================================
+
+Mac 版需要修改以下文件，使程序默认使用 TradingView 数据源而非 MT5。
+
+4.1 修改 pyproject.toml — 无需修改
+  pyproject.toml 中 MetaTrader5 和 pywin32 已标记 sys_platform == 'win32'，
+  macOS 下 pip install -e . 会自动跳过这两个包。无需手动修改。
+
+4.2 修改 pa_agent/config/settings.py — 无需修改
+  settings.py 中 last_data_source 的默认值 "mt5" 在 Mac 上会导致启动时报错，
+  但程序已在 app_context.py 中做了 try-except 处理：
+  MT5 连接失败时会打印警告但不会崩溃。
+  不过为了更好的体验，需要修改默认配置，见 4.3。
+
+4.3 修改 pa_agent/data/factory.py — 关键修改
+  将 normalize_data_source_kind() 的默认返回值从 "mt5" 改为 "tradingview"，
+  以及 DATA_SOURCE_CHOICES 的顺序调整为 TradingView 在前。
+
+  编辑 PROJECT_ROOT/pa_agent/data/factory.py：
+
+  找到：
+    DATA_SOURCE_CHOICES: tuple[tuple[DataSourceKind, str], ...] = (
+        ("mt5", "MT5"),
+        ("tradingview", "TradingView"),
+    )
+
+  改为：
+    DATA_SOURCE_CHOICES: tuple[tuple[DataSourceKind, str], ...] = (
+        ("tradingview", "TradingView"),
+        ("mt5", "MT5"),
+    )
+
+  找到 normalize_data_source_kind 函数中的：
+    return "mt5"
+
+  改为：
+    return "tradingview"
+
+4.4 修改 pa_agent/config/settings.py — 关键修改
+  将 GeneralSettings 中 last_data_source 的默认值从 "mt5" 改为 "tradingview"。
+
+  编辑 PROJECT_ROOT/pa_agent/config/settings.py：
+
+  找到：
+    last_data_source: DataSourceKind = "mt5"
+
+  改为：
+    last_data_source: DataSourceKind = "tradingview"
+
+  同时将默认品种从 MT5 品种改为 TradingView 品种：
+
+  找到：
+    last_symbol: str = "XAUUSDm"
+
+  改为：
+    last_symbol: str = "XAUUSD"
+
+  （注意：MT5 品种名通常带 "m" 后缀如 XAUUSDm，TradingView 用标准名 XAUUSD）
+
+4.5 修改 pa_agent/gui/main_window.py — UI 提示文本
+  编辑 PROJECT_ROOT/pa_agent/gui/main_window.py：
+
+  找到所有 "MT5" 相关的提示文本并适当修改（可选，不影响功能）：
+  - "输入 MT5 品种名，如 XAUUSDm…" → "输入品种名，如 XAUUSD…"
+  - "K 线数据来源：MT5（需终端登录）、TradingView（tvDatafeed）" →
+    "K 线数据来源：TradingView（tvDatafeed）、MT5（仅 Windows）"
+
+4.6 确认项目目录结构完整性
+
+  cd PROJECT_ROOT
+  test -f pa_agent/main.py && echo "main.py OK" || echo "main.py MISSING"
+  test -f pa_agent/gui/main_window.py && echo "main_window.py OK" || echo "main_window.py MISSING"
+  test -d prompt_engineering && echo "prompt_engineering OK" || echo "prompt_engineering MISSING"
+
+预期输出：三条 OK
+
+config/settings.json 若不存在，程序首次启动会自动创建，可忽略。
+
+================================================================
+  第五步：生成运行智能体.command 到项目根目录
+================================================================
+
+在 PROJECT_ROOT 目录下生成"运行智能体.command"文件。
+.command 文件是 macOS 双击即可运行的脚本文件，必须放在项目根目录（与 run.py 同级）。
+
+执行以下命令生成：
+
+  cat > "PROJECT_ROOT/运行智能体.command" << 'EOF'
+#!/bin/bash
+cd "$(dirname "$0")"
+python3 run.py
+if [ $? -ne 0 ]; then
+    echo ""
+    echo "[错误] 程序异常退出，请查看上方错误信息。"
+    echo "按回车键关闭窗口..."
+    read
+fi
+EOF
+  chmod +x "PROJECT_ROOT/运行智能体.command"
+
+说明：
+- cd "$(dirname "$0")" 会自动切换到 .command 文件自身所在的目录
+- 无论用户把项目放在哪个路径，只要 .command 在项目根目录就能正确运行
+- 不需要激活虚拟环境，因为依赖直接装在系统 Python 中
+- chmod +x 使 .command 文件可执行
+- macOS 首次双击 .command 文件可能会提示"无法验证开发者"：
+  右键 → 打开 → 仍要打开（或者：系统偏好设置 → 安全性与隐私 → 允许）
+
+验收：确认文件已生成且内容正确
+
+  test -f "PROJECT_ROOT/运行智能体.command" && echo "File exists" || echo "File missing"
+  test -x "PROJECT_ROOT/运行智能体.command" && echo "Executable" || echo "Not executable"
+  cat "PROJECT_ROOT/运行智能体.command"
+
+预期输出：
+- File exists
+- Executable
+- 显示上述 .command 文件完整内容
+
+【故障排查】
+- 若双击 .command 文件提示"无法验证开发者"：
+  右键点击 .command 文件 → 打开 → 仍要打开
+  或终端执行：xattr -d com.apple.quarantine "PROJECT_ROOT/运行智能体.command"
+- 若双击闪退：终端中手动运行观察输出：
+  bash "PROJECT_ROOT/运行智能体.command"
+
+================================================================
+  第六步：验收 — 运行程序并确认无错误
+================================================================
+
+验收流程（必须全部通过才能交付）：
+
+6.1 检查依赖完整性
+
+  cd PROJECT_ROOT
+  python3 -c "from pa_agent.main import main; print('Import OK')"
+
+预期输出：Import OK
+若失败：依赖未安装完整，回到第三步重新安装
+
+6.2 启动程序（命令行方式，确认能正常初始化）
+
+  cd PROJECT_ROOT
+  python3 run.py
+
+验收标准：
+- 程序窗口成功弹出（PyQt6 GUI 窗口出现）
+- 窗口标题显示 "PA Agent"
+- 控制台无 ImportError / ModuleNotFoundError 等致命错误
+- 数据源默认显示为 TradingView（而非 MT5）
+
+若窗口正常弹出，关闭窗口即可（点 X 退出）。
+
+6.3 双击 .command 文件验收
+
+  open "PROJECT_ROOT/运行智能体.command"
+
+验收标准：同 6.2，窗口正常弹出且无致命错误
+
+6.4 最终验收清单
+
+  [ ] python3 --version 输出 3.11+
+  [ ] 所有核心包导入测试通过（13 个 OK，不含 MetaTrader5 和 pywin32）
+  [ ] TradingView 连通性测试通过：
+      python3 -c "from tvDatafeed import TvDatafeed, Interval; df = TvDatafeed().get_hist('XAUUSD', 'OANDA', Interval.in_daily, n_bars=2); print('TV OK:', len(df), 'bars')"
+      预期输出：TV OK: 2 bars（若失败，见第三步故障排查 问题 3.5 / 3.6）
+  [ ] python3 -c "from pa_agent.main import main; print('Import OK')" 输出 Import OK
+  [ ] python3 run.py 窗口正常弹出
+  [ ] 运行智能体.command 双击窗口正常弹出
+  [ ] 控制台无 ImportError / ModuleNotFoundError
+  [ ] 数据源默认为 TradingView（非 MT5）
+
+全部通过 → 部署成功，可交付用户。
+任一项失败 → 根据错误信息对照故障排查章节修复后重新验收。
+
+================================================================
+  附：配置 API Key（用户首次使用时需操作）
+================================================================
+
+程序启动后，在 GUI 界面中点击"设置"按钮：
+- Base URL 默认已为 https://api.deepseek.com（DeepSeek 官方接口，一般无需修改）
+- 填入 DeepSeek API Key（在 https://platform.deepseek.com 申请）
+- 模型默认已为 deepseek-v4-flash（可按需改为 deepseek-v4-pro 等）
+- 点击保存
+
+API Key 会被存储在 config/settings.json 中。
+
+================================================================
+  附：TradingView 数据源使用说明
+================================================================
+
+1. 刷新间隔设置
+   在 GUI 设置页面中可配置"刷新间隔(毫秒)"（refresh_interval_ms），默认 1000ms。
+   该值在 TradingView 数据源下同样生效，但注意：TradingView nologin 模式
+   对高频请求有限流，建议日线设 3000-5000ms，分钟线可设 1000-2000ms。
+   PA_Agent 内置了防重叠调用和指数退避机制，连续失败时会自动延长等待时间。
+
+2. "获取数据"按钮
+   TradingView 数据源不会在启动时自动拉取数据。
+   需手动点击工具栏中的"获取数据"按钮，之后会进入持续刷新模式。
+   切换品种或周期后，RefreshLoop 会在下一个 tick 自动使用新的品种/周期拉取，
+   无需再次点击"获取数据"按钮——切换会立即中断当前挂起的请求，
+   而不是等上一个请求的超时周期结束。
+
+3. 交易所选择
+   下拉框中的交易所已按类别标注（如 SSE（A股）、HKEX（港股）、BINANCE 等），
+   加密类交易所无后缀标注。
+   不确定交易所时可选择"（自动）"，程序会自动探测。
+
+4. 匿名模式限速说明
+   未配置 TradingView 账号时使用匿名（nologin）模式，TradingView 会对匿名 IP
+   施加请求限制，尤其是小周期（1m、5m）拉取更容易触发。
+   若频繁出现超时，最有效的解决方案是在设置界面填入 TradingView 账号：
+   设置 → TradingView → 用户名 / 密码（凭证加密存储，不会明文保存）。
+
+================================================================
+  附：Mac 特有问题
+================================================================
+
+Q: macOS 上没有 MT5，怎么办？
+A: Mac 版不使用 MT5，默认使用 TradingView 作为数据源。TradingView 支持外汇、
+   期货、加密货币、股票等多种品种，覆盖了大部分 MT5 的品种。
+   如果必须使用 MT5，可以通过虚拟机（Parallels Desktop / VMware Fusion）运行 Windows。
+
+Q: macOS 上 PyQt6 窗口字体模糊
+A: 如果使用 Retina 显示器，PyQt6 通常会自动适配。若仍然模糊：
+   在终端运行前设置环境变量：
+   export QT_SCALE_FACTOR=1
+   python3 run.py
+
+Q: macOS 上双击 .command 文件提示权限被拒绝
+A: 终端执行：
+   chmod +x "PROJECT_ROOT/运行智能体.command"
+   若提示"无法验证开发者"：
+   xattr -d com.apple.quarantine "PROJECT_ROOT/运行智能体.command"
+
+Q: macOS 上 Python 路径问题（python vs python3）
+A: macOS 自带 Python 2（python 命令），安装 Python 3 后命令为 python3。
+   run.py 中使用的是 sys.executable，会自动使用正确的 Python。
+   .command 文件中写的是 python3 run.py，确保调用 Python 3。
+
+Q: TradingView 数据拉取超时
+A: 常见原因和处理顺序：
+   1. 先确认 tvDatafeed headers bug 已修复（见第三步 问题 3.5）
+   2. 检查网络能否访问 TradingView（国内直连可能需要代理）
+   3. 小周期（1m/5m）更容易触发 TradingView 匿名限速，切换到 15m 以上测试
+   4. 长期超时的根本解决方案：在设置界面配置 TradingView 账号登录
+
+Q: API 调用报网络错误
+A: 检查网络连接；若使用代理需确认代理可用；确认 API Key 和 Base URL 配置正确。
+
+Q: config/settings.json 损坏
+A: 删除该文件，程序重启会自动生成默认配置：
+   rm "PROJECT_ROOT/config/settings.json"
+
+Q: 日志在哪里
+A: PROJECT_ROOT/logs/pa_agent.log
+
+Q: 如何更新程序
+A:
+   cd PROJECT_ROOT
+   git pull
+   pip3 install -e . -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn
+
+Q: 双击 .command 文件闪退
+A: 终端中手动运行观察输出：
+   bash "PROJECT_ROOT/运行智能体.command"

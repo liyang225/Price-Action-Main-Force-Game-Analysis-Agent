@@ -1,0 +1,26 @@
+# T+1 独立闸门策略
+#
+# B 类：对 A 股多头工作流，gap_up 为有利，near_reference 为中性，
+# gap_down 为不利。若未来更改 OpeningRange outcome 名称，必须同步修改下方映射。
+# C 类：target_first 是成功事件；stop_first 与 neither 均属于本窗口内未成功。
+#
+# 修改任意策略前必须递增 version；闸门结果会保存该版本。
+
+version: 1
+
+thresholds:
+  minimum_target_first_probability: 0.50
+  maximum_stop_first_probability: 0.50
+  maximum_adverse_opening_probability: 0.50
+
+opening_outcomes:
+  favorable:
+    - gap_up
+  neutral:
+    - near_reference
+  adverse:
+    - gap_down
+
+dominance:
+  require_target_over_non_target: true
+  require_non_adverse_over_adverse: true

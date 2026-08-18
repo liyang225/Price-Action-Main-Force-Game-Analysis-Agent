@@ -1,0 +1,37 @@
+#!/bin/sh
+# Block accidental commit of API keys, local settings, logs, and analysis records.
+set -e
+
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$staged" ] && exit 0
+
+for path in $staged; do
+	case "$path" in
+		config/settings.json|config/settings.local.json|config/exception_state.json|config/secret.key)
+			echo "pre-commit: blocked sensitive file: $path"
+			exit 1
+			;;
+		.env|.env.*)
+			echo "pre-commit: blocked env file: $path"
+			exit 1
+			;;
+		logs/*)
+			echo "pre-commit: blocked log file: $path"
+			exit 1
+			;;
+		records/pending/*.json|records/pending/*.jsonl)
+			echo "pre-commit: blocked analysis record: $path"
+			exit 1
+			;;
+	esac
+done
+
+if git diff --cached -U0 | grep '^+' | grep -v '^+++' | grep -E \
+	'api_key_encrypted["[:space:]]*:[[:space:]]*"[A-Za-z0-9+/=]{20,}"|"api_key"[[:space:]]*:[[:space:]]*"[^*]{8,}"|sk-[A-Za-z0-9]{12,}' \
+	>/dev/null 2>&1; then
+	echo "pre-commit: staged diff may contain API key material (api_key / api_key_encrypted / sk-...)"
+	echo "Unstage those changes; keep secrets in config/settings.json (gitignored) only."
+	exit 1
+fi
+
+exit 0

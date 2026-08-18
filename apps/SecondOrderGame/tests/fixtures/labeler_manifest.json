@@ -1,0 +1,42 @@
+{
+  "expected_counts": {
+    "出货": 35,
+    "建仓": 90,
+    "拉升": 35,
+    "狩猎止损": 40,
+    "观望": 300,
+    "震仓": 40
+  },
+  "fixture_sha256": "a552c105ab36c2d066e2f4fbcd3ab91b7d6b4b237d0ea88efb5638dc608865b6",
+  "full_local_verification": {
+    "coverage": 0.26995369685180876,
+    "expected_counts": {
+      "出货": 614,
+      "建仓": 4279,
+      "拉升": 479,
+      "狩猎止损": 202,
+      "观望": 19401,
+      "震仓": 561
+    },
+    "multi_hit_count": 13,
+    "unavailable_count": 13488,
+    "unlabeled_count": 69058
+  },
+  "rule_hash": "3e101dd9b499edbe9a9dc2b23ca0eb7a91a44fb1425d2f6d617078d0a5bac3a8",
+  "participant_input": {
+    "kind": "synthetic_boundary_values",
+    "main_in_flow": 100.0,
+    "super_in_flow": 40.0,
+    "big_in_flow": [20.0, 21.0],
+    "purpose": "exercise the strict greater-than 0.60 ADR-0018 boundary"
+  },
+  "sampling": {
+    "method": "stratified_by_resolved_behavior_with_unlabeled_rows",
+    "row_count": 2000
+  },
+  "schema_version": 1,
+  "seed": 20260810,
+  "source_data_sha256": "3c6409cd4e5adca9c5bad5bcb8eceda2a6496aa6eee8933072e4e85cd14bc54e",
+  "unavailable_count": 0,
+  "unlabeled_count": 1460
+}

@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-and-build:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install applications
+        run: |
+          python -m pip install --upgrade pip build
+          python -m pip install -e ".\apps\PA_Agent[dev]"
+          python -m pip install -e ".\apps\SecondOrderGame[dev]"
+      - name: Run offline tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          python -m pytest -q .\apps\PA_Agent\tests -m "not live"
+          python -m pytest -q .\apps\SecondOrderGame\tests
+      - name: Build SecondOrderGame
+        run: python -m build .\apps\SecondOrderGame
+      - name: Reject tracked runtime data
+        shell: pwsh
+        run: |
+          $bad = git ls-files | Select-String '(^|/)(__pycache__|runtime|logs|records|trade_records|analysis_history)(/|$)|\.(db|sqlite|log|pyc)$'
+          if ($bad) { $bad; throw "Tracked runtime data found" }
