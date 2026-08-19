@@ -6,7 +6,9 @@
 - `apps/SecondOrderGame`：基于情绪周期、参与者行为和 T+1 闸门的二阶博弈推演。
 
 b站视频介绍：【耗费12亿token！开源券商付费功能 一键部署主力行为分析智能体】https://www.bilibili.com/video/BV1pM8g6kEx6?vd_source=364d0985edff8e1fe09d8f5635b32eae
-https://github.com/liyang225/Price-Action-Main-Force-Game-Analysis-Agent/blob/4162d19ecdbd936728ec0dbaa57d6acfaf4a82f6/.github/PHOTO/%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE%202026-08-17%20180823.png
+
+![核心界面]（https://github.com/liyang225/Price-Action-Main-Force-Game-Analysis-Agent/blob/4162d19ecdbd936728ec0dbaa57d6acfaf4a82f6/.github/PHOTO/%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE%202026-08-17%20180823.png）
+
 二阶博弈系统当前的功能模块可以概括为：
 一、数据层：富途行情、AkShare 龙虎榜、新闻预取、每日分析缓存、情绪台账、资金流台账、限流与数据源抽象。
 二、板块/个股标注：板块情绪周期识别（含 v2 影子运行与切换）、个股主力行为事后标注。
