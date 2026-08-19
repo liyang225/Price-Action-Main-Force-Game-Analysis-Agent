@@ -7,7 +7,9 @@
 
 b站视频介绍：【耗费12亿token！开源券商付费功能 一键部署主力行为分析智能体】https://www.bilibili.com/video/BV1pM8g6kEx6?vd_source=364d0985edff8e1fe09d8f5635b32eae
 
-![核心界面]（https://github.com/liyang225/Price-Action-Main-Force-Game-Analysis-Agent/blob/4162d19ecdbd936728ec0dbaa57d6acfaf4a82f6/.github/PHOTO/%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE%202026-08-17%20180823.png）
+<img width="2653" height="1723" alt="屏幕截图 2026-08-17 180823" src="https://github.com/user-attachments/assets/eeac2566-c7ec-402a-bdb6-0119c0180307" />
+<img width="1884" height="1422" alt="屏幕截图 2026-08-17 180938" src="https://github.com/user-attachments/assets/0e1e85ef-e902-4704-817c-1b333be4bc7d" />
+
 
 二阶博弈系统当前的功能模块可以概括为：
 一、数据层：富途行情、AkShare 龙虎榜、新闻预取、每日分析缓存、情绪台账、资金流台账、限流与数据源抽象。
