@@ -7,6 +7,10 @@
 
 b站视频介绍：【耗费12亿token！开源券商付费功能 一键部署主力行为分析智能体】https://www.bilibili.com/video/BV1pM8g6kEx6?vd_source=364d0985edff8e1fe09d8f5635b32eae
 
+<img width="2653" height="1723" alt="屏幕截图 2026-08-17 180823" src="https://github.com/user-attachments/assets/eeac2566-c7ec-402a-bdb6-0119c0180307" />
+<img width="1884" height="1422" alt="屏幕截图 2026-08-17 180938" src="https://github.com/user-attachments/assets/0e1e85ef-e902-4704-817c-1b333be4bc7d" />
+
+
 二阶博弈系统当前的功能模块可以概括为：
 一、数据层：富途行情、AkShare 龙虎榜、新闻预取、每日分析缓存、情绪台账、资金流台账、限流与数据源抽象。
 二、板块/个股标注：板块情绪周期识别（含 v2 影子运行与切换）、个股主力行为事后标注。
