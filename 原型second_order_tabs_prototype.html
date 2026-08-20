@@ -1,0 +1,1596 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>二阶博弈标签页 UI 原型</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #111317;
+      --panel: #171a20;
+      --panel-raised: #1d2128;
+      --panel-soft: #20252d;
+      --line: #303640;
+      --line-strong: #414955;
+      --text: #edf0f4;
+      --text-2: #b6bdc8;
+      --text-3: #7f8997;
+      --accent: #6f99d5;
+      --accent-soft: #202f43;
+      --up: #ef6670;
+      --down: #35bc88;
+      --warn: #d3a64c;
+      --radius: 6px;
+      --font-ui: "Microsoft YaHei UI", "Segoe UI", sans-serif;
+      --font-num: "Cascadia Mono", "Consolas", monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      letter-spacing: 0;
+    }
+
+    html {
+      background: var(--bg);
+    }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-ui);
+      font-size: 14px;
+      line-height: 1.55;
+    }
+
+    button,
+    summary {
+      font: inherit;
+    }
+
+    button {
+      color: inherit;
+    }
+
+    .workspace {
+      width: min(720px, 100%);
+      margin: 0 auto;
+      padding: 0 12px 28px;
+    }
+
+    .tabs-wrap {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      padding: 8px 0;
+      background: rgba(17, 19, 23, 0.96);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .tabs {
+      display: flex;
+      gap: 2px;
+      overflow-x: auto;
+      scrollbar-width: thin;
+    }
+
+    .tab {
+      flex: 1 0 auto;
+      min-width: 92px;
+      border: 0;
+      border-radius: 4px;
+      background: transparent;
+      color: var(--text-2);
+      padding: 9px 10px;
+      cursor: pointer;
+      transition: background-color 140ms ease, color 140ms ease;
+    }
+
+    .tab:hover {
+      background: var(--panel-raised);
+      color: var(--text);
+    }
+
+    .tab:active {
+      transform: translateY(1px);
+    }
+
+    .tab:focus-visible,
+    .scenario-toggle:focus-visible,
+    summary:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .tab[aria-selected="true"] {
+      background: var(--accent-soft);
+      color: var(--text);
+      box-shadow: inset 0 -2px 0 var(--accent);
+    }
+
+    .panel {
+      display: none;
+      padding-top: 17px;
+    }
+
+    .panel.is-active {
+      display: block;
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 12px;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin-top: 0;
+    }
+
+    h1 {
+      margin-bottom: 2px;
+      font-size: 20px;
+      line-height: 1.3;
+      font-weight: 650;
+    }
+
+    .panel-subtitle {
+      margin: 0;
+      color: var(--text-3);
+      font-size: 12px;
+    }
+
+    .as-of {
+      flex: 0 0 auto;
+      color: var(--text-3);
+      font-family: var(--font-num);
+      font-size: 11px;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 9px;
+      margin-top: 9px;
+    }
+
+    .span-2 {
+      grid-column: 1 / -1;
+    }
+
+    .card {
+      min-width: 0;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+      padding: 14px;
+    }
+
+    .card.emphasis {
+      border-color: #3f5a7e;
+      background: #171d26;
+      box-shadow: inset 3px 0 0 var(--accent);
+    }
+
+    .card h2 {
+      margin-bottom: 11px;
+      color: var(--text);
+      font-size: 15px;
+      line-height: 1.35;
+      font-weight: 650;
+    }
+
+    .card h3 {
+      margin-bottom: 6px;
+      color: var(--text-2);
+      font-size: 13px;
+      line-height: 1.4;
+      font-weight: 600;
+    }
+
+    .muted {
+      color: var(--text-3);
+    }
+
+    .summary-band {
+      display: grid;
+      grid-template-columns: 128px minmax(0, 1fr);
+      align-items: stretch;
+      overflow: hidden;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      background: var(--panel);
+    }
+
+    .summary-score {
+      display: grid;
+      place-content: center;
+      min-height: 118px;
+      padding: 14px;
+      border-right: 1px solid var(--line);
+      background: var(--accent-soft);
+      text-align: center;
+    }
+
+    .summary-score strong {
+      font-family: var(--font-num);
+      font-size: 34px;
+      line-height: 1;
+      font-weight: 650;
+    }
+
+    .summary-score span {
+      margin-top: 8px;
+      color: var(--text-2);
+      font-size: 12px;
+    }
+
+    .summary-copy {
+      display: grid;
+      align-content: center;
+      gap: 7px;
+      padding: 15px 16px;
+    }
+
+    .summary-copy strong {
+      font-size: 16px;
+    }
+
+    .summary-copy p {
+      margin: 0;
+      color: var(--text-2);
+    }
+
+    .fact-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 7px;
+    }
+
+    .fact-grid.cols-3 {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .fact {
+      min-width: 0;
+      border-radius: 4px;
+      background: var(--panel-raised);
+      padding: 9px 10px;
+    }
+
+    .fact span {
+      display: block;
+      color: var(--text-3);
+      font-size: 11px;
+    }
+
+    .fact strong {
+      display: block;
+      margin-top: 3px;
+      color: var(--text);
+      font-family: var(--font-num);
+      font-size: 14px;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    .up {
+      color: var(--up) !important;
+    }
+
+    .down {
+      color: var(--down) !important;
+    }
+
+    .warn {
+      color: var(--warn) !important;
+    }
+
+    .insight-list {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      color: var(--text-2);
+    }
+
+    .insight-list li {
+      position: relative;
+      padding-left: 13px;
+    }
+
+    .insight-list li::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0.68em;
+      width: 5px;
+      height: 1px;
+      background: var(--accent);
+    }
+
+    .belief-bar {
+      display: flex;
+      height: 12px;
+      overflow: hidden;
+      border-radius: 3px;
+      background: var(--panel-soft);
+    }
+
+    .belief-bar span {
+      min-width: 2px;
+      border-right: 1px solid var(--panel);
+      background: #53606f;
+    }
+
+    .belief-bar .active {
+      background: var(--accent);
+    }
+
+    .belief-key {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 7px 10px;
+      margin-top: 11px;
+    }
+
+    .belief-key div {
+      color: var(--text-3);
+      font-size: 11px;
+    }
+
+    .belief-key strong {
+      display: block;
+      margin-top: 1px;
+      color: var(--text-2);
+      font-family: var(--font-num);
+      font-size: 12px;
+    }
+
+    details.audit {
+      margin-top: 9px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+    }
+
+    details.audit summary {
+      padding: 11px 13px;
+      color: var(--text-2);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    details.audit[open] summary {
+      border-bottom: 1px solid var(--line);
+      color: var(--text);
+    }
+
+    .audit-body {
+      padding: 5px 13px 12px;
+    }
+
+    .table-wrap {
+      width: 100%;
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    th,
+    td {
+      padding: 8px 7px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--text-3);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    td {
+      color: var(--text-2);
+    }
+
+    tbody tr:last-child th,
+    tbody tr:last-child td {
+      border-bottom: 0;
+    }
+
+    td.num {
+      color: var(--text);
+      font-family: var(--font-num);
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .range {
+      position: relative;
+      height: 52px;
+      margin: 4px 12px 8px;
+    }
+
+    .range-line {
+      position: absolute;
+      top: 20px;
+      left: 0;
+      right: 0;
+      height: 6px;
+      border-radius: 3px;
+      background: var(--accent-soft);
+      border: 1px solid #3f5a7e;
+    }
+
+    .range-marker {
+      position: absolute;
+      top: 14px;
+      left: 50%;
+      width: 2px;
+      height: 18px;
+      transform: translateX(-50%);
+      background: var(--accent);
+    }
+
+    .range-label {
+      position: absolute;
+      top: 34px;
+      color: var(--text-3);
+      font-family: var(--font-num);
+      font-size: 10px;
+      transform: translateX(-50%);
+    }
+
+    .signal-table {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1px;
+      overflow: hidden;
+      border-radius: 4px;
+      background: var(--line);
+    }
+
+    .signal-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      background: var(--panel-raised);
+      padding: 8px 9px;
+      color: var(--text-2);
+      font-size: 12px;
+    }
+
+    .signal-row strong {
+      color: var(--text-3);
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    .behavior-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .behavior-row {
+      display: grid;
+      grid-template-columns: 92px minmax(60px, 1fr) 52px;
+      align-items: center;
+      gap: 9px;
+      color: var(--text-2);
+      font-size: 12px;
+    }
+
+    .behavior-line {
+      height: 2px;
+      background: var(--line);
+    }
+
+    .behavior-line span {
+      display: block;
+      height: 2px;
+      background: #62758e;
+    }
+
+    .behavior-row.primary {
+      color: var(--text);
+    }
+
+    .behavior-row.primary .behavior-line span {
+      height: 3px;
+      background: var(--accent);
+    }
+
+    .behavior-row output {
+      color: var(--text);
+      font-family: var(--font-num);
+      text-align: right;
+    }
+
+    .participant-priors {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0;
+    }
+
+    .participant-prior {
+      min-width: 0;
+      padding-right: 14px;
+    }
+
+    .participant-prior + .participant-prior {
+      border-left: 1px solid var(--line);
+      padding-right: 0;
+      padding-left: 14px;
+    }
+
+    .participant-prior h3 {
+      margin-bottom: 9px;
+      color: var(--text);
+      font-size: 13px;
+    }
+
+    .status-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .status-field {
+      min-width: 0;
+      padding: 11px 12px;
+    }
+
+    .status-field + .status-field {
+      border-left: 1px solid var(--line);
+    }
+
+    .status-field span {
+      display: block;
+      color: var(--text-3);
+      font-size: 11px;
+    }
+
+    .status-field strong {
+      display: block;
+      margin-top: 3px;
+      color: var(--text);
+      font-size: 15px;
+      font-weight: 650;
+    }
+
+    .status-field strong.ready {
+      color: #63d391;
+    }
+
+    .status-field strong.running {
+      color: #61c7e8;
+    }
+
+    .status-message {
+      margin: 10px 0 0;
+      color: var(--text-2);
+      font-size: 12px;
+    }
+
+    .metric-strip {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 1px;
+      margin-bottom: 10px;
+      overflow: hidden;
+      border-radius: 4px;
+      background: var(--line);
+    }
+
+    .metric-strip div {
+      min-width: 0;
+      background: var(--panel-raised);
+      padding: 8px 9px;
+    }
+
+    .metric-strip span {
+      display: block;
+      color: var(--text-3);
+      font-size: 10px;
+    }
+
+    .metric-strip strong {
+      display: block;
+      margin-top: 2px;
+      color: var(--text);
+      font-family: var(--font-num);
+      font-size: 13px;
+      font-weight: 600;
+      overflow-wrap: anywhere;
+    }
+
+    .data-note {
+      margin: -3px 0 9px;
+      color: var(--text-3);
+      font-size: 11px;
+    }
+
+    .scenario-main {
+      display: grid;
+      grid-template-columns: 112px minmax(0, 1fr);
+      border: 1px solid #3f5a7e;
+      border-radius: var(--radius);
+      background: #171d26;
+      overflow: hidden;
+    }
+
+    .scenario-probability {
+      display: grid;
+      place-content: center;
+      min-height: 142px;
+      border-right: 1px solid #3f5a7e;
+      background: var(--accent-soft);
+      text-align: center;
+    }
+
+    .scenario-probability strong {
+      font-family: var(--font-num);
+      font-size: 28px;
+      line-height: 1;
+    }
+
+    .scenario-probability span {
+      margin-top: 7px;
+      color: var(--text-2);
+      font-size: 11px;
+    }
+
+    .scenario-action {
+      padding: 14px 15px;
+    }
+
+    .scenario-action h2 {
+      margin-bottom: 6px;
+      font-size: 16px;
+    }
+
+    .scenario-action p {
+      margin-bottom: 8px;
+      color: var(--text-2);
+    }
+
+    .decision-line {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .scenario-toggle {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      color: var(--accent);
+      padding: 0;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .scenario-toggle:hover {
+      color: #90b3e4;
+    }
+
+    .scenario-detail {
+      display: none;
+      margin-top: 9px;
+      padding-top: 9px;
+      border-top: 1px solid var(--line);
+      color: var(--text-2);
+      font-size: 12px;
+    }
+
+    .scenario-detail.is-open {
+      display: block;
+    }
+
+    .alternative-scenario .prob {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--text);
+      font-family: var(--font-num);
+      font-size: 23px;
+      line-height: 1;
+    }
+
+    .alternative-scenario p {
+      margin-bottom: 8px;
+      color: var(--text-2);
+    }
+
+    .rank-list {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .rank-list li {
+      display: grid;
+      grid-template-columns: 20px minmax(0, 1fr) 64px;
+      gap: 8px;
+      align-items: baseline;
+      color: var(--text-2);
+    }
+
+    .rank-list b {
+      color: var(--text-3);
+      font-family: var(--font-num);
+      font-size: 11px;
+      font-weight: 500;
+    }
+
+    .rank-list output {
+      font-family: var(--font-num);
+      text-align: right;
+    }
+
+    .trade-plan {
+      border-color: #496889;
+      background: #171d25;
+    }
+
+    .trade-plan-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 12px;
+    }
+
+    .trade-plan-head h2 {
+      margin-bottom: 3px;
+    }
+
+    .allocation {
+      flex: 0 0 auto;
+      color: var(--accent);
+      font-family: var(--font-num);
+      font-size: 18px;
+      font-weight: 650;
+    }
+
+    .plan-columns {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .plan-block {
+      border-radius: 4px;
+      background: var(--panel-raised);
+      padding: 10px;
+    }
+
+    .plan-block.trigger {
+      grid-column: 1 / -1;
+    }
+
+    .plan-block p {
+      margin: 0;
+      color: var(--text-2);
+      font-size: 12px;
+    }
+
+    .risk-list {
+      display: grid;
+      gap: 9px;
+    }
+
+    .risk-item {
+      display: grid;
+      grid-template-columns: 98px minmax(0, 1fr);
+      gap: 10px;
+      color: var(--text-2);
+      font-size: 12px;
+    }
+
+    .risk-item strong {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .disclaimer {
+      margin: 13px 2px 0;
+      color: var(--text-3);
+      font-size: 11px;
+      line-height: 1.5;
+    }
+
+    .trade-rules {
+      margin-top: 22px;
+    }
+
+    .trade-rules h1 {
+      margin-bottom: 10px;
+    }
+
+    .trade-rules-box {
+      position: relative;
+    }
+
+    .trade-rules textarea {
+      display: block;
+      width: 100%;
+      min-height: 180px;
+      resize: vertical;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      outline: 0;
+      background: var(--panel);
+      color: var(--text);
+      padding: 42px 14px 14px;
+      font: inherit;
+      line-height: 1.65;
+      transition: border-color 140ms ease, background-color 140ms ease;
+    }
+
+    .trade-rules textarea::placeholder {
+      color: var(--text-3);
+    }
+
+    .trade-rules textarea:focus {
+      border-color: var(--accent);
+    }
+
+    .trade-rules textarea[readonly] {
+      cursor: default;
+      background: var(--panel-raised);
+    }
+
+    .trade-rules-edit {
+      position: absolute;
+      top: 9px;
+      right: 9px;
+      z-index: 1;
+      border: 1px solid var(--line-strong);
+      border-radius: 4px;
+      background: var(--panel-soft);
+      color: var(--accent);
+      padding: 4px 10px;
+      cursor: pointer;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .trade-rules-edit:hover {
+      border-color: var(--accent);
+      color: #90b3e4;
+    }
+
+    .trade-rules-edit:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    .state-message {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+      padding: 22px;
+      color: var(--text-2);
+      text-align: center;
+    }
+
+    .skeleton {
+      display: grid;
+      gap: 8px;
+    }
+
+    .skeleton span {
+      display: block;
+      height: 12px;
+      border-radius: 3px;
+      background: var(--panel-soft);
+    }
+
+    .skeleton span:nth-child(2) {
+      width: 76%;
+    }
+
+    @media (max-width: 560px) {
+      .workspace {
+        padding-inline: 8px;
+      }
+
+      .panel-head {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .grid-2,
+      .fact-grid.cols-3,
+      .plan-columns,
+      .signal-table,
+      .metric-strip {
+        grid-template-columns: 1fr;
+      }
+
+      .span-2,
+      .plan-block.trigger {
+        grid-column: auto;
+      }
+
+      .summary-band,
+      .scenario-main {
+        grid-template-columns: 1fr;
+      }
+
+      .summary-score,
+      .scenario-probability {
+        min-height: 90px;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .belief-key {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .trade-plan-head {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .risk-item {
+        grid-template-columns: 1fr;
+        gap: 2px;
+      }
+
+      .status-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .status-field + .status-field {
+        border-top: 1px solid var(--line);
+        border-left: 0;
+      }
+
+      .participant-priors {
+        grid-template-columns: 1fr;
+      }
+
+      .participant-prior {
+        padding-right: 0;
+      }
+
+      .participant-prior + .participant-prior {
+        margin-top: 14px;
+        border-top: 1px solid var(--line);
+        border-left: 0;
+        padding-top: 14px;
+        padding-left: 0;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="workspace">
+    <header class="tabs-wrap">
+      <nav class="tabs" role="tablist" aria-label="二阶博弈分析">
+        <button class="tab" type="button" role="tab" aria-selected="true" aria-controls="overview" data-tab="overview">概览</button>
+        <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="cycle" data-tab="cycle" tabindex="-1">情绪周期</button>
+        <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="game" data-tab="game" tabindex="-1">博弈推演</button>
+        <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="response" data-tab="response" tabindex="-1">应对树</button>
+        <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="sector" data-tab="sector" tabindex="-1">板块分析</button>
+        <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="market" data-tab="market" tabindex="-1">大盘分析</button>
+      </nav>
+    </header>
+
+    <main>
+      <section class="panel is-active" id="overview" role="tabpanel" aria-label="概览">
+        <div class="panel-head">
+          <div>
+            <h1>概览</h1>
+            <p class="panel-subtitle">分析对象、推演进度与数据准备状态</p>
+          </div>
+          <time class="as-of">2026-08-16 11:30</time>
+        </div>
+
+        <div class="grid-2">
+          <article class="card span-2">
+            <h2>分析上下文</h2>
+            <div class="fact-grid cols-3">
+              <div class="fact"><span>分析对象</span><strong>半导体</strong></div>
+              <div class="fact"><span>决策基准</span><strong>收盘决策</strong></div>
+              <div class="fact"><span>PA 技术结论</span><strong class="muted">等待推演</strong></div>
+            </div>
+          </article>
+
+          <article class="card span-2">
+            <h2>OHLCV 事后标注器状态</h2>
+            <div class="status-grid">
+              <div class="status-field">
+                <span>加载状态</span>
+                <strong class="ready">已加载</strong>
+              </div>
+              <div class="status-field">
+                <span>运行状态</span>
+                <strong class="running">运行中</strong>
+              </div>
+            </div>
+            <p class="status-message">规则配置与标注范围已就绪，后台正在补跑历史交易日。</p>
+          </article>
+
+          <article class="card span-2">
+            <h2>推演进度</h2>
+            <div class="signal-table">
+              <div class="signal-row"><span>分析材料</span><strong>已准备</strong></div>
+              <div class="signal-row"><span>板块情绪</span><strong>已量化</strong></div>
+              <div class="signal-row"><span>博弈信号</span><strong>已量化</strong></div>
+              <div class="signal-row"><span>情景应对</span><strong>等待生成</strong></div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel" id="cycle" role="tabpanel" aria-label="情绪周期" hidden>
+        <div class="panel-head">
+          <div>
+            <h1>情绪周期</h1>
+            <p class="panel-subtitle">半导体板块，状态观测与后验信念</p>
+          </div>
+          <time class="as-of">2026-08-16 11:30</time>
+        </div>
+
+        <div class="summary-band">
+          <div class="summary-score">
+            <strong>50.0</strong>
+            <span>情绪指数</span>
+          </div>
+          <div class="summary-copy">
+            <strong>休市保持，中性未破</strong>
+            <p>有效周期为启动，LLM 观测处于发酵。共识仍有分歧，方向尚未确认。</p>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <article class="card">
+            <h2>状态快照</h2>
+            <div class="fact-grid">
+              <div class="fact"><span>观测周期</span><strong>发酵</strong></div>
+              <div class="fact"><span>有效周期</span><strong>启动</strong></div>
+              <div class="fact"><span>周期事件</span><strong>平台整理</strong></div>
+              <div class="fact"><span>置信度</span><strong>中</strong></div>
+              <div class="fact"><span>共识状态</span><strong>分歧</strong></div>
+              <div class="fact"><span>共识方向</span><strong class="muted">未确认</strong></div>
+            </div>
+          </article>
+
+          <article class="card">
+            <h2>HMM 后验信念</h2>
+            <div class="belief-bar" aria-label="HMM 后验概率分布">
+              <span style="width:25.35%"></span>
+              <span style="width:17.63%"></span>
+              <span class="active" style="width:49.52%"></span>
+              <span style="width:3.33%"></span>
+              <span style="width:4.17%"></span>
+            </div>
+            <div class="belief-key">
+              <div>冰点<strong>25.35%</strong></div>
+              <div>发酵<strong>17.63%</strong></div>
+              <div>启动<strong>49.52%</strong></div>
+              <div>退潮<strong>3.33%</strong></div>
+              <div>高潮<strong>4.17%</strong></div>
+            </div>
+          </article>
+
+          <article class="card span-2">
+            <h2>判断依据</h2>
+            <ul class="insight-list">
+              <li>板块自 7 月底低点反弹后进入高位平台整理，距离前高仍有空间。</li>
+              <li>连续三日缩量，成交额由 466 亿降至 252 亿，多空分歧正在增加。</li>
+              <li>设备扩产利好与存储端回落并存，消息未形成单一方向。</li>
+              <li>高位题材集中回调，但板块核心标的尚未批量破位。</li>
+            </ul>
+          </article>
+        </div>
+
+        <details class="audit">
+          <summary>查看指数计算口径</summary>
+          <div class="audit-body table-wrap">
+            <table>
+              <tbody>
+                <tr><th>指数</th><td>基准 50.0 加惯性项与当日净增量，结果限制在 0 至 100。</td></tr>
+                <tr><th>当日净增量</th><td>消息增量加行情增量，限制在 -15.0 至 +15.0。</td></tr>
+                <tr><th>消息增量</th><td>情绪分按相关性、衰减、来源可信度与主体目的修正。</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </details>
+      </section>
+
+      <section class="panel" id="game" role="tabpanel" aria-label="博弈推演" hidden>
+        <div class="panel-head">
+          <div>
+            <h1>博弈推演</h1>
+            <p class="panel-subtitle">程序化信号、参与者识别与行为推演</p>
+          </div>
+          <time class="as-of">非交易日快照</time>
+        </div>
+
+        <div class="grid-2">
+          <article class="card emphasis">
+            <h2>纳什均衡带</h2>
+            <div class="range" aria-label="均衡带下沿 1.365，中心 1.404，上沿 1.444">
+              <div class="range-line"></div>
+              <div class="range-marker"></div>
+              <span class="range-label" style="left:0">1.365</span>
+              <span class="range-label" style="left:50%">1.404</span>
+              <span class="range-label" style="left:100%">1.444</span>
+            </div>
+            <p class="panel-subtitle">当前位于均衡带内，未形成方向突破。</p>
+          </article>
+
+          <article class="card">
+            <h2>动量与资金</h2>
+            <div class="fact-grid">
+              <div class="fact"><span>RSI</span><strong>49.08</strong></div>
+              <div class="fact"><span>异常放量</span><strong class="muted">未触发</strong></div>
+              <div class="fact"><span>聪明钱净流入</span><strong class="muted">未确认</strong></div>
+              <div class="fact"><span>机构吸筹 / 派发</span><strong class="muted">均未触发</strong></div>
+            </div>
+          </article>
+
+          <article class="card span-2">
+            <h2>信号矩阵</h2>
+            <div class="signal-table">
+              <div class="signal-row"><span>羊群买入</span><strong>未触发</strong></div>
+              <div class="signal-row"><span>羊群卖出</span><strong>未触发</strong></div>
+              <div class="signal-row"><span>上方流动性陷阱</span><strong>未触发</strong></div>
+              <div class="signal-row"><span>下方流动性陷阱</span><strong>未触发</strong></div>
+              <div class="signal-row"><span>反向与动量信号</span><strong>未触发</strong></div>
+              <div class="signal-row"><span>回归信号</span><strong>未触发</strong></div>
+            </div>
+          </article>
+
+          <article class="card">
+            <h2>参与者识别</h2>
+            <div class="fact-grid">
+              <div class="fact"><span>主导参与者</span><strong>散户</strong></div>
+              <div class="fact"><span>行为候选</span><strong>观望</strong></div>
+            </div>
+            <p class="panel-subtitle" style="margin-top:10px">成交量未放大，情绪指数中性，主力与羊群信号均未触发。</p>
+          </article>
+
+          <article class="card">
+            <h2>反向证据</h2>
+            <ul class="insight-list">
+              <li>部分机构调仓消息提及半导体，但属于低成本声明。</li>
+              <li>板块近两日微涨 0.69%，动量仍偏平淡。</li>
+            </ul>
+          </article>
+
+          <article class="card emphasis span-2">
+            <h2>主导行为推演</h2>
+            <div class="fact-grid cols-3">
+              <div class="fact"><span>参与者</span><strong>散户</strong></div>
+              <div class="fact"><span>推演行为</span><strong>观望</strong></div>
+              <div class="fact"><span>先验权重</span><strong>1.0</strong></div>
+            </div>
+            <p class="panel-subtitle" style="margin-top:10px">专家先验推演，非统计估计。当前缺少可区分主力意图的高成本信号。</p>
+          </article>
+
+          <article class="card span-2">
+            <h2>HMM 行为先验</h2>
+            <p class="data-note">政策环境修正后的参与者分布。两组先验始终同时显示，不随当前主导者切换。</p>
+            <div class="participant-priors">
+              <section class="participant-prior" aria-labelledby="principal-prior-title">
+                <h3 id="principal-prior-title">主力</h3>
+                <div class="behavior-list">
+                  <div class="behavior-row primary"><span>建仓</span><div class="behavior-line"><span style="width:36.1%"></span></div><output>36.1%</output></div>
+                  <div class="behavior-row"><span>震仓</span><div class="behavior-line"><span style="width:11.9%"></span></div><output>11.9%</output></div>
+                  <div class="behavior-row primary"><span>拉升</span><div class="behavior-line"><span style="width:31.0%"></span></div><output>31.0%</output></div>
+                  <div class="behavior-row"><span>出货</span><div class="behavior-line"><span style="width:6.7%"></span></div><output>6.7%</output></div>
+                  <div class="behavior-row"><span>观望</span><div class="behavior-line"><span style="width:12.4%"></span></div><output>12.4%</output></div>
+                  <div class="behavior-row"><span>狩猎止损</span><div class="behavior-line"><span style="width:1.9%"></span></div><output>1.9%</output></div>
+                </div>
+              </section>
+              <section class="participant-prior" aria-labelledby="retail-prior-title">
+                <h3 id="retail-prior-title">散户</h3>
+                <div class="behavior-list">
+                  <div class="behavior-row"><span>FOMO 追高</span><div class="behavior-line"><span style="width:8.3%"></span></div><output>8.3%</output></div>
+                  <div class="behavior-row"><span>恐慌割肉</span><div class="behavior-line"><span style="width:18.0%"></span></div><output>18.0%</output></div>
+                  <div class="behavior-row primary"><span>观望</span><div class="behavior-line"><span style="width:25.8%"></span></div><output>25.8%</output></div>
+                  <div class="behavior-row"><span>理性跟随</span><div class="behavior-line"><span style="width:17.4%"></span></div><output>17.4%</output></div>
+                  <div class="behavior-row primary"><span>底部建仓</span><div class="behavior-line"><span style="width:25.0%"></span></div><output>25.0%</output></div>
+                  <div class="behavior-row"><span>高位减仓</span><div class="behavior-line"><span style="width:5.6%"></span></div><output>5.6%</output></div>
+                </div>
+              </section>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel" id="response" role="tabpanel" aria-label="应对树" hidden>
+        <div class="panel-head">
+          <div>
+            <h1>应对树</h1>
+            <p class="panel-subtitle">先看主分支，再检查两侧偏离情景</p>
+          </div>
+          <time class="as-of">下一交易日开盘</time>
+        </div>
+
+        <article class="scenario-main">
+          <div class="scenario-probability">
+            <strong>99.7%</strong>
+            <span>符合预期</span>
+          </div>
+          <div class="scenario-action">
+            <h2>平开或微幅高开，等待共识确认</h2>
+            <p>观察开盘后半小时内是否有辨识度标的放量上攻，以及涨停家数是否有效扩散。</p>
+            <div class="decision-line">动作：保持观望，不因小波动行动。</div>
+            <button class="scenario-toggle" type="button" aria-expanded="false" data-target="scenario-base">展开观察条件</button>
+            <div class="scenario-detail" id="scenario-base">只有价格上行、成交持续温和放大，并出现可验证产业催化时，才考虑轻仓参与。跌破近期整理区下沿则放弃。</div>
+          </div>
+        </article>
+
+        <div class="grid-2">
+          <article class="card alternative-scenario">
+            <span class="prob up">0.1%</span>
+            <h2>超预期强</h2>
+            <p>大幅高开且情绪亢奋时，先验证增量资金是否持续承接。</p>
+            <div class="decision-line">不追高，防范脉冲回落。</div>
+            <button class="scenario-toggle" type="button" aria-expanded="false" data-target="scenario-high">展开分支</button>
+            <div class="scenario-detail" id="scenario-high">若高开伴随巨量但随即回落，且核心标的没有共振，则按诱多式冲高处理。高开低走并放量跌破开盘价时，全天观望。</div>
+          </article>
+
+          <article class="card alternative-scenario">
+            <span class="prob down">0.1%</span>
+            <h2>低于预期</h2>
+            <p>大幅低开或核心标的走弱时，区分主动承接与退潮延续。</p>
+            <div class="decision-line">弱承接则回避，破位离场。</div>
+            <button class="scenario-toggle" type="button" aria-expanded="false" data-target="scenario-low">展开分支</button>
+            <div class="scenario-detail" id="scenario-low">若快速收复跌幅且量能放大，可小仓观察反弹。若持续缩量阴跌或反弹无量，保持空仓，不做主观抄底。</div>
+          </article>
+        </div>
+
+        <section class="trade-rules" aria-labelledby="trade-rules-title">
+          <h1 id="trade-rules-title">我的交易规则</h1>
+          <div class="trade-rules-box">
+            <textarea id="trade-rules-input" readonly placeholder="记录你在交易中必须遵守的规则……" aria-label="我的交易规则"></textarea>
+            <button class="trade-rules-edit" id="trade-rules-edit" type="button">修改</button>
+          </div>
+          <span id="trade-rules-status" class="sr-only" aria-live="polite"></span>
+        </section>
+
+        <p class="disclaimer">停损概率当前数据不足，因此只显示可执行状态，不提供低可信数字。</p>
+      </section>
+
+      <section class="panel" id="sector" role="tabpanel" aria-label="板块分析" hidden>
+        <div class="panel-head">
+          <div>
+            <h1>板块分析</h1>
+            <p class="panel-subtitle">半导体板块的结构、政策与共识</p>
+          </div>
+          <time class="as-of">SH.LIST0022</time>
+        </div>
+
+        <div class="grid-2">
+          <article class="card span-2">
+            <h2>资金流向</h2>
+            <div class="metric-strip">
+              <div><span>最近交易日主力净流入</span><strong class="up">+88 万</strong></div>
+              <div><span>超大单</span><strong class="up">+44 万</strong></div>
+              <div><span>大单</span><strong class="up">+26 万</strong></div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>日期</th><th>主力</th><th>超大单</th><th>大单</th><th>中单</th><th>小单</th></tr></thead>
+                <tbody>
+                  <tr><td>08-12</td><td class="num up">+120 万</td><td class="num up">+60 万</td><td class="num up">+36 万</td><td class="num up">+12 万</td><td class="num down">-12 万</td></tr>
+                  <tr><td>08-13</td><td class="num down">-45 万</td><td class="num down">-23 万</td><td class="num down">-14 万</td><td class="num down">-5 万</td><td class="num up">+5 万</td></tr>
+                  <tr><td>08-14</td><td class="num up">+88 万</td><td class="num up">+44 万</td><td class="num up">+26 万</td><td class="num up">+9 万</td><td class="num down">-9 万</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <article class="card">
+            <h2>连板信息</h2>
+            <div class="metric-strip">
+              <div><span>最高连板</span><strong>2 板</strong></div>
+              <div><span>涨停股数</span><strong class="up">1</strong></div>
+              <div><span>跌停股数</span><strong class="down">0</strong></div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>代码</th><th>连板</th><th>方向</th></tr></thead>
+                <tbody><tr><td>600000</td><td class="num">2 板</td><td class="num up">涨停</td></tr></tbody>
+              </table>
+            </div>
+          </article>
+
+          <article class="card">
+            <h2>龙虎榜</h2>
+            <div class="metric-strip">
+              <div><span>上榜股数</span><strong>1</strong></div>
+              <div><span>机构净买</span><strong class="up">+300 万</strong></div>
+              <div><span>游资净买</span><strong class="up">+200 万</strong></div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>代码</th><th>原因</th><th>净买入</th></tr></thead>
+                <tbody><tr><td>600000</td><td>日涨幅偏离值达 7%</td><td class="num up">+500 万</td></tr></tbody>
+              </table>
+            </div>
+            <p class="data-note" style="margin:9px 0 0">机构席位：机构专用；游资席位：华泰证券总部。</p>
+          </article>
+
+          <article class="card">
+            <h2>板块状态</h2>
+            <div class="fact-grid">
+              <div class="fact"><span>观测周期</span><strong>发酵</strong></div>
+              <div class="fact"><span>有效周期</span><strong>启动</strong></div>
+              <div class="fact"><span>共识</span><strong>分歧</strong></div>
+              <div class="fact"><span>方向</span><strong class="muted">未确认</strong></div>
+            </div>
+          </article>
+
+          <article class="card span-2">
+            <h2>结构结论</h2>
+            <ul class="insight-list">
+              <li>前期反弹后进入高位平台整理，趋势尚未破坏。</li>
+              <li>连续缩量说明资金分歧增加，尚未形成可交易的分离信号。</li>
+              <li>核心标的未出现批量破位，暂按启动期内的中继整理处理。</li>
+              <li>机构调仓声明缺少价格与资金共振，不作为主线确认依据。</li>
+            </ul>
+          </article>
+
+          <article class="card emphasis">
+            <h2>政策环境</h2>
+            <div class="fact"><span>当前判断</span><strong>政策暖风</strong></div>
+            <p class="panel-subtitle" style="margin-top:10px">政策环境只修正行为权重，不改变周期结构。</p>
+          </article>
+
+        </div>
+      </section>
+
+      <section class="panel" id="market" role="tabpanel" aria-label="大盘分析" hidden>
+        <div class="panel-head">
+          <div>
+            <h1>大盘分析</h1>
+            <p class="panel-subtitle">指数结构、板块主线与明日交易安排</p>
+          </div>
+          <time class="as-of">2026-08-16</time>
+        </div>
+
+        <div class="summary-band">
+          <div class="summary-score">
+            <strong>54</strong>
+            <span>盘面信号</span>
+          </div>
+          <div class="summary-copy">
+            <strong>偏暖震荡，结构分化</strong>
+            <p>创业板与深证偏强，但下跌家数更多。资金集中在局部赛道，赚钱效应尚未扩散。</p>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <article class="card">
+            <h2>市场广度</h2>
+            <div class="fact-grid">
+              <div class="fact"><span>上涨</span><strong class="up">2400</strong></div>
+              <div class="fact"><span>下跌</span><strong class="down">2970</strong></div>
+              <div class="fact"><span>涨停</span><strong class="up">62</strong></div>
+              <div class="fact"><span>跌停</span><strong class="down">14</strong></div>
+              <div class="fact"><span>上涨占比</span><strong>44.7%</strong></div>
+              <div class="fact"><span>两市成交</span><strong>21,566 亿</strong></div>
+            </div>
+          </article>
+
+          <article class="card">
+            <h2>指数结构</h2>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>指数</th><th>涨跌幅</th><th>成交额</th></tr></thead>
+                <tbody>
+                  <tr><td>上证指数</td><td class="num up">+0.01%</td><td class="num">9904 亿</td></tr>
+                  <tr><td>深证成指</td><td class="num up">+0.45%</td><td class="num">11525 亿</td></tr>
+                  <tr><td>创业板指</td><td class="num up">+1.12%</td><td class="num">5565 亿</td></tr>
+                  <tr><td>上证 50</td><td class="num down">-0.41%</td><td class="num">1524 亿</td></tr>
+                  <tr><td>沪深 300</td><td class="num up">+0.04%</td><td class="num">5498 亿</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <article class="card">
+            <h2>行业领涨</h2>
+            <ol class="rank-list">
+              <li><b>01</b><span>稀土</span><output class="up">+5.82%</output></li>
+              <li><b>02</b><span>通信线缆及配套</span><output class="up">+5.33%</output></li>
+              <li><b>03</b><span>激光设备</span><output class="up">+4.44%</output></li>
+              <li><b>04</b><span>电子化学品 II</span><output class="up">+3.75%</output></li>
+              <li><b>05</b><span>电子化学品 III</span><output class="up">+3.75%</output></li>
+            </ol>
+          </article>
+
+          <article class="card">
+            <h2>行业领跌</h2>
+            <ol class="rank-list">
+              <li><b>01</b><span>其他数字媒体</span><output class="down">-3.78%</output></li>
+              <li><b>02</b><span>院线</span><output class="down">-3.64%</output></li>
+              <li><b>03</b><span>火力发电</span><output class="down">-3.31%</output></li>
+              <li><b>04</b><span>宠物食品</span><output class="down">-3.30%</output></li>
+              <li><b>05</b><span>乳品</span><output class="down">-3.24%</output></li>
+            </ol>
+          </article>
+
+          <article class="card trade-plan span-2">
+            <div class="trade-plan-head">
+              <div>
+                <h2>明日交易计划</h2>
+                <p class="panel-subtitle">均衡偏防守，低吸主线核心，高抛滞涨筹码</p>
+              </div>
+              <div class="allocation">40% - 60%</div>
+            </div>
+            <div class="plan-columns">
+              <div class="plan-block">
+                <h3>关注</h3>
+                <p>先进制造、通信配套与稀土。优先选择抗跌且早盘率先修复的辨识度标的。</p>
+              </div>
+              <div class="plan-block">
+                <h3>回避</h3>
+                <p>高位纯情绪题材、业绩承压的影视传媒，以及火电等传统公用事业。</p>
+              </div>
+              <div class="plan-block trigger">
+                <h3>失效触发</h3>
+                <p>成交额降至 1.5 万亿以下，或创业板指放量跌破 3580 点。触发后仓位降至 30% 以内并暂停新仓。</p>
+              </div>
+            </div>
+          </article>
+
+          <article class="card">
+            <h2>资金与情绪</h2>
+            <p class="muted">成交突破两万亿，但跌多涨少与涨停占优并存。资金抱团局部热点，非主线流动性承压，系统性恐慌尚未出现。</p>
+          </article>
+
+          <article class="card">
+            <h2>消息催化</h2>
+            <p class="muted">海外科技硬件与日韩市场反弹间接提振情绪，国内暂无明确政策落地。关注产业催化与宏观数据能否形成直接映射。</p>
+          </article>
+
+          <article class="card span-2">
+            <h2>风险提示</h2>
+            <div class="risk-list">
+              <div class="risk-item"><strong>量价背离</strong><span>指数微涨但下跌家数占优，量能若无法持续，获利盘可能集中兑现。</span></div>
+              <div class="risk-item"><strong>外部扰动</strong><span>海外通胀与利率预期波动可能传导至风险偏好，加剧开盘波动。</span></div>
+              <div class="risk-item"><strong>高位股补跌</strong><span>题材股若未形成企稳结构，可能继续压制短线接力情绪。</span></div>
+            </div>
+          </article>
+        </div>
+
+        <p class="disclaimer">以上内容仅用于界面结构演示，不构成投资建议。实际交易需结合盘中确认与个人风险承受能力。</p>
+      </section>
+
+      <template id="loading-template">
+        <div class="state-message skeleton" aria-label="正在加载">
+          <span></span><span></span><span></span>
+        </div>
+      </template>
+      <template id="empty-template"><div class="state-message">当前标签暂无可展示的分析结果。</div></template>
+      <template id="error-template"><div class="state-message">分析结果加载失败，请稍后重试。</div></template>
+    </main>
+  </div>
+
+  <script>
+    (function () {
+      var tabs = Array.prototype.slice.call(document.querySelectorAll('.tab'));
+      var panels = Array.prototype.slice.call(document.querySelectorAll('.panel'));
+
+      function activate(id, moveFocus) {
+        tabs.forEach(function (tab) {
+          var active = tab.dataset.tab === id;
+          tab.setAttribute('aria-selected', active ? 'true' : 'false');
+          tab.tabIndex = active ? 0 : -1;
+          if (active && moveFocus) tab.focus();
+        });
+        panels.forEach(function (panel) {
+          var active = panel.id === id;
+          panel.classList.toggle('is-active', active);
+          panel.hidden = !active;
+        });
+      }
+
+      tabs.forEach(function (tab, index) {
+        tab.addEventListener('click', function () {
+          activate(tab.dataset.tab, false);
+        });
+        tab.addEventListener('keydown', function (event) {
+          var next = null;
+          if (event.key === 'ArrowRight') next = (index + 1) % tabs.length;
+          if (event.key === 'ArrowLeft') next = (index - 1 + tabs.length) % tabs.length;
+          if (event.key === 'Home') next = 0;
+          if (event.key === 'End') next = tabs.length - 1;
+          if (next !== null) {
+            event.preventDefault();
+            activate(tabs[next].dataset.tab, true);
+          }
+        });
+      });
+
+      document.querySelectorAll('.scenario-toggle').forEach(function (button) {
+        button.addEventListener('click', function () {
+          var detail = document.getElementById(button.dataset.target);
+          var open = detail.classList.toggle('is-open');
+          button.setAttribute('aria-expanded', open ? 'true' : 'false');
+          button.textContent = open ? '收起说明' : (button.dataset.target === 'scenario-base' ? '展开观察条件' : '展开分支');
+        });
+      });
+
+      var tradeRulesInput = document.getElementById('trade-rules-input');
+      var tradeRulesEdit = document.getElementById('trade-rules-edit');
+      var tradeRulesStatus = document.getElementById('trade-rules-status');
+      var tradeRulesStorageKey = 'second-order-game:trade-rules';
+
+      try {
+        var savedTradeRules = window.localStorage.getItem(tradeRulesStorageKey);
+        if (savedTradeRules !== null) tradeRulesInput.value = savedTradeRules;
+      } catch (error) {
+        // Keep the editor usable when browser storage is unavailable.
+      }
+
+      tradeRulesEdit.addEventListener('click', function () {
+        var editing = tradeRulesInput.hasAttribute('readonly');
+        if (editing) {
+          tradeRulesInput.removeAttribute('readonly');
+          tradeRulesEdit.textContent = '保存';
+          tradeRulesInput.focus();
+          tradeRulesStatus.textContent = '正在编辑交易规则';
+          return;
+        }
+
+        try {
+          window.localStorage.setItem(tradeRulesStorageKey, tradeRulesInput.value);
+        } catch (error) {
+          // The in-memory value remains available for this session.
+        }
+        tradeRulesInput.setAttribute('readonly', 'readonly');
+        tradeRulesEdit.textContent = '修改';
+        tradeRulesStatus.textContent = '交易规则已保存';
+      });
+    })();
+  </script>
+</body>
+</html>
