@@ -78,6 +78,50 @@ def test_reconcile_is_idempotent(tmp_path) -> None:
     assert first  # first pass did the counting
 
 
+def test_reconcile_counts_main_force_label_that_arrives_after_sector_day(tmp_path) -> None:
+    """A zero-match pass must not permanently close a sector/day."""
+    with LabelLedger(tmp_path / "labels.db") as ledger:
+        ledger.record_sector_labels(
+            "BK0475",
+            [
+                {
+                    "date": "2026-08-10",
+                    "cycle_position": "启动",
+                    "status": "labeled",
+                    "rule_hash": CYCLE_HASH,
+                    "config_version": 1,
+                }
+            ],
+        )
+        with BehaviorCountStore(tmp_path / "behavior.db") as store:
+            assert store.reconcile(
+                ledger,
+                cycle_rule_hash=CYCLE_HASH,
+                behavior_rule_hash=BEHAVIOR_HASH,
+            ) == {}
+            ledger.record_stock_labels(
+                "SZ.000001",
+                [
+                    {
+                        "date": "2026-08-10",
+                        "participant": "主力",
+                        "behavior": "拉升",
+                        "status": "labeled",
+                        "rule_hash": BEHAVIOR_HASH,
+                        "config_version": 1,
+                    }
+                ],
+                sector_code="BK0475",
+            )
+            increments = store.reconcile(
+                ledger,
+                cycle_rule_hash=CYCLE_HASH,
+                behavior_rule_hash=BEHAVIOR_HASH,
+            )
+
+    assert any("启动" in key and "拉升" in key for key in increments)
+
+
 def test_reconcile_skips_retail_participant(tmp_path) -> None:
     with LabelLedger(tmp_path / "labels.db") as ledger:
         _seed(ledger)

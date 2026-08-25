@@ -1,0 +1,149 @@
+# 散户层事后标注器规则 — DRAFT（未冻结）
+#
+# ⚠ 草稿状态：本文件是研究候选规则（candidate），尚未按 ADR-0007 冻结。
+#   冻结前必须：1) 用实测数据验证分布与覆盖；2) 重算 rule_hash；
+#   3) 独立 ADR 记录冻结。散户层与板块层/个股主力层各自独立冻结、独立哈希。
+#
+# 行为语义（CONTEXT.md）：散户是情绪与跟随驱动的群体（羊群散户）。
+#   FOMO追高   高位情绪化追涨（怕踏空）
+#   恐慌割肉   下跌放量恐慌抛售（怕深套）
+#   观望       低波动低量，无明确情绪
+#   理性跟随   趋势确认后适度跟随（仍有纪律）
+#   底部建仓   低位缩量/温和承接（逆向左侧）
+#   高位减仓   高位逐步兑现（情绪顶点前离场）
+#
+# 输入证据：个股 OHLCV + 散单资金流（sml_in_flow + mid_in_flow = 散户资金）。
+#   散单流列缺失时（历史数据缺口）规则降级为 OHLCV 证据，行标记 flow_unavailable，
+#   绝不假装散单流中性。
+
+version: "candidate-retail-2026-08-16"
+draft: true
+
+forward_return_feature: forward_excess_return
+
+evidence:
+  primary: [ohlcv, small_order_flow]
+  flow_columns: [sml_in_flow, mid_in_flow]
+  flow_required: false
+  missing_flow_policy: degrade_to_ohlcv
+
+features:
+  return_1d: "当日收益"
+  forward_excess_return: "前向五日板块超额收益（散户行为后果）"
+  volume_ratio_20: "成交量 / 前 20 日成交量中位数"
+  price_position_20: "(close - low_20) / (high_20 - low_20)，20 日区间位置"
+  distance_from_high_20: "close / high_20 - 1，距 20 日高点距离"
+  close_position: "收盘在当日振幅中的位置"
+  lower_shadow_ratio: "下影线 / 振幅"
+  upper_shadow_ratio: "上影线 / 振幅"
+  retail_flow_share: "散单（小单+中单）净流入占全部资金流入比例"
+  retail_net_direction: "散单净方向 in/out"
+
+# 前视窗口与回看
+forward_return:
+  window_bars: 5
+
+lookback:
+  range_bars: 20
+  volume_median_bars: 20
+
+# 零振幅 K 线（一字板）：情绪极端，散户行为仍可判（FOMO 追高/恐慌割肉）
+zero_range_bar:
+  shadow_ratio: 0.0
+  close_position: 0.5
+
+# 停牌或前视窗口不完整：无标签，不兜底
+suspension_policy: no_label
+
+# 六条草案规则阈值（研究候选，非冻结值）
+thresholds:
+  fomo_high_position_min: 0.75
+  fomo_high_distance_min: -0.02
+  fomo_forward_max: 0.02
+  fomo_volume_ratio_min: 1.30
+  fomo_upper_shadow_min: 0.25
+
+  panic_forward_max: -0.03
+  panic_volume_ratio_min: 1.20
+  panic_lower_shadow_min: 0.25
+  panic_return_max: -0.02
+
+  watch_return_abs_max: 0.015
+  watch_forward_abs_max: 0.02
+  watch_volume_ratio_max: 1.20
+
+  rational_forward_min: 0.03
+  rational_volume_ratio_min: 1.05
+  rational_volume_ratio_max: 2.20
+  rational_position_min: 0.45
+  rational_forward_max: 0.10
+
+  bottom_build_position_max: 0.30
+  bottom_build_forward_min: 0.03
+  bottom_build_volume_ratio_max: 1.15
+  bottom_build_forward_max: 0.06
+
+  high_reduce_position_min: 0.70
+  high_reduce_forward_max: 0.00
+  high_reduce_volume_ratio_min: 1.10
+
+rules:
+  FOMO追高:
+    all:
+      - {feature: price_position_20, op: gte, threshold: fomo_high_position_min}
+      - {feature: distance_from_high_20, op: gte, threshold: fomo_high_distance_min}
+      - {feature: forward_excess_return, op: lte, threshold: fomo_forward_max}
+      - {feature: volume_ratio_20, op: gte, threshold: fomo_volume_ratio_min}
+      - {feature: upper_shadow_ratio, op: gte, threshold: fomo_upper_shadow_min}
+
+  恐慌割肉:
+    all:
+      - {feature: return_1d, op: lte, threshold: panic_return_max}
+      - {feature: forward_excess_return, op: lte, threshold: panic_forward_max}
+      - {feature: volume_ratio_20, op: gte, threshold: panic_volume_ratio_min}
+      - {feature: lower_shadow_ratio, op: gte, threshold: panic_lower_shadow_min}
+
+  观望:
+    all:
+      - {feature: return_1d, op: abs_lte, threshold: watch_return_abs_max}
+      - {feature: forward_excess_return, op: abs_lte, threshold: watch_forward_abs_max}
+      - {feature: volume_ratio_20, op: lte, threshold: watch_volume_ratio_max}
+
+  理性跟随:
+    all:
+      - {feature: forward_excess_return, op: gte, threshold: rational_forward_min}
+      - {feature: forward_excess_return, op: lte, threshold: rational_forward_max}
+      - {feature: volume_ratio_20, op: gte, threshold: rational_volume_ratio_min}
+      - {feature: volume_ratio_20, op: lte, threshold: rational_volume_ratio_max}
+      - {feature: price_position_20, op: gte, threshold: rational_position_min}
+
+  底部建仓:
+    all:
+      - {feature: price_position_20, op: lte, threshold: bottom_build_position_max}
+      - {feature: forward_excess_return, op: gte, threshold: bottom_build_forward_min}
+      - {feature: forward_excess_return, op: lte, threshold: bottom_build_forward_max}
+      - {feature: volume_ratio_20, op: lte, threshold: bottom_build_volume_ratio_max}
+
+  高位减仓:
+    all:
+      - {feature: price_position_20, op: gte, threshold: high_reduce_position_min}
+      - {feature: forward_excess_return, op: lte, threshold: high_reduce_forward_max}
+      - {feature: volume_ratio_20, op: gte, threshold: high_reduce_volume_ratio_min}
+
+# 排序依据：形态特异性优先。FOMO追高要求高位+放量+上影+前向转负，证据最特异；
+# 恐慌割肉要求下跌放量+长下影+前向续跌；观望是最低波动最低量状态，不能覆盖
+# 任何更特异的情绪行为。
+priority: [FOMO追高, 恐慌割肉, 理性跟随, 底部建仓, 高位减仓, 观望]
+
+# 无标签交易日：真正未命中的输出无标签，不更新计数，保存行级特征供重标。
+unlabeled:
+  fallback_to_watch: false
+  persist_row_features: true
+
+# 规则哈希：发布时计算本文件 SHA256，与每条标签一起存档。
+# 修改散户规则不作废板块层/个股主力层已积累的计数（ADR-0007 独立哈希）。
+rule_hash:
+  algorithm: sha256
+  scope: this_file
+  store_with_every_label: true
+  frozen_hash: ""

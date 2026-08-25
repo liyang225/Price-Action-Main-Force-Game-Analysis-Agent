@@ -20,7 +20,9 @@ if len(sys.argv) > 1:
 
 from pa_agent.ai.json_validator import _strip_fences
 
-text = open(sys.argv[1], encoding="utf-8").read() if len(sys.argv) > 1 else RAW
+text = RAW if len(sys.argv) > 1 else open(
+    r"D:\cl\PA_Agent\tools\stage2_raw_sample.txt", encoding="utf-8"
+).read()
 
 stripped = _strip_fences(text)
 print("stripped len", len(stripped))

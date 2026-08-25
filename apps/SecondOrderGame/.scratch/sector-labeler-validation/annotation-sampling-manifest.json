@@ -1,0 +1,17 @@
+{
+  "schema_version": "2",
+  "status": "archived_legacy_reference_only",
+  "replacement": "annotation_sheet_v1.csv",
+  "state_space": ["冰点", "启动", "分歧", "高潮", "退潮"],
+  "replacement_state_space": ["冰点", "启动", "发酵", "高潮", "退潮"],
+  "seed": 20260810,
+  "total": 75,
+  "legacy_stratum_counts": {
+    "冰点": 15,
+    "启动": 15,
+    "分歧": 15,
+    "高潮": 15,
+    "退潮": 15
+  },
+  "blind_sheet": true
+}

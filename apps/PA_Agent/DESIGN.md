@@ -332,7 +332,7 @@ Settings 顶层分为：
 
 在 Windows 上运行测试使用项目约定的解释器，不使用 py -3：
 
-    python -m pytest tests
+    C:\Users\bai\AppData\Local\Programs\Python\Python314\python.exe -m pytest tests
 
 针对改动范围，应先运行对应 unit/integration 测试，再运行完整 tests。涉及 GUI、数据源、供应商或并发控制时，应优先补充失败路径测试。
 

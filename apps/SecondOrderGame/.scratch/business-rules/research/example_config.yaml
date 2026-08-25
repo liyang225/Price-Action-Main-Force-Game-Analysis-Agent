@@ -1,0 +1,41 @@
+version: 1
+
+data:
+  provider: futu
+  provider_options:
+    host: 127.0.0.1
+    port: 11111
+    max_count: 1000
+    page_delay_seconds: 1.1
+  start: 2024-01-01
+  end: 2024-12-31
+  period: day
+  instruments:
+    - code: SH.600000
+      kind: stock
+    - code: SH.LIST0002
+      kind: sector_index
+
+rules:
+  - label: 放量阳线
+    when:
+      all:
+        - field: close
+          op: gt
+          value: 10.0
+        - field: volume
+          op: gte
+          value: 1000000
+  - label: 长下影候选
+    when:
+      all:
+        - field: low
+          op: lt
+          value: 9.5
+        - field: close
+          op: gte
+          value: 10.0
+
+output:
+  format: json
+  include_matches: false

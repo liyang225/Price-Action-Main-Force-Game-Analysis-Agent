@@ -1,0 +1,24 @@
+{
+  "schema_version": "3",
+  "generator_version": 3,
+  "state_space": [
+    "冰点",
+    "启动",
+    "发酵",
+    "高潮",
+    "退潮"
+  ],
+  "rule_config_version": 0,
+  "rule_config_hash": "954cbcf4d6d18974307b61b36c2636cec5e85eac940819edde8502f09ef66919",
+  "input_data_sha256": "8d7ed9d65bfdba8c6b768c6d967103dded35f6eaab71047f251adb7105f40f65",
+  "seed": 20260812,
+  "total": 75,
+  "stratum_counts": {
+    "冰点": 15,
+    "启动": 15,
+    "发酵": 15,
+    "高潮": 15,
+    "退潮": 15
+  },
+  "blind_sheet": true
+}

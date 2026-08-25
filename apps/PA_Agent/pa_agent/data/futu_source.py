@@ -135,6 +135,10 @@ class FutuSource(DataSource):
         self._subscription_started_at: dict[tuple[str, str], float] = {}
         self._pending_unsubscribes: dict[tuple[str, str], Timer] = {}
         self._subscription_lock = RLock()
+        # RefreshLoop and one-shot analysis fetches can otherwise call the
+        # same OpenD context concurrently. Serialize the full snapshot cycle
+        # to avoid overlapping get_cur_kline/get_market_snapshot operations.
+        self._snapshot_lock = RLock()
 
     def connect(self) -> None:
         try:
@@ -246,31 +250,32 @@ class FutuSource(DataSource):
         return constituents
 
     def latest_snapshot(self, n: int) -> list[KlineBar]:
-        if not self._connected or self._context is None:
-            raise DataSourceTransientError("Futu 未连接，请先启动并登录 OpenD")
-        if not self._symbol or not self._timeframe:
-            raise DataSourceTransientError("Futu 未订阅品种/周期")
-        try:
-            from futu import AuType, KLType, RET_OK
-            self._ensure_opend_subscription()
-            ktype = getattr(KLType, _KLTYPE_BY_TIMEFRAME[self._timeframe])
-            ret, data = self._context.get_cur_kline(
-                self._symbol, min(max(n + 60, 120), 1000), ktype=ktype, autype=AuType.QFQ
-            )
-        except Exception as exc:
-            raise DataSourceTransientError(f"Futu OpenD K线调用失败: {exc}") from exc
-        if ret != RET_OK:
-            raise DataSourceTransientError(f"Futu OpenD 返回错误: {data}")
-        try:
-            bars = _df_to_bars_newest_first(
-                data, n, self._symbol.split(".", 1)[0], self._timeframe
-            )
-        except Exception as exc:
-            raise DataSourceTransientError(f"Futu K线数据解析失败: {exc}") from exc
-        self._refresh_market_summary()
-        if not bars:
-            raise DataSourceTransientError(f"Futu 未返回数据: {self._symbol} {self._timeframe}")
-        return bars
+        with self._snapshot_lock:
+            if not self._connected or self._context is None:
+                raise DataSourceTransientError("Futu 未连接，请先启动并登录 OpenD")
+            if not self._symbol or not self._timeframe:
+                raise DataSourceTransientError("Futu 未订阅品种/周期")
+            try:
+                from futu import AuType, KLType, RET_OK
+                self._ensure_opend_subscription()
+                ktype = getattr(KLType, _KLTYPE_BY_TIMEFRAME[self._timeframe])
+                ret, data = self._context.get_cur_kline(
+                    self._symbol, min(max(n + 60, 120), 1000), ktype=ktype, autype=AuType.QFQ
+                )
+            except Exception as exc:
+                raise DataSourceTransientError(f"Futu OpenD K线调用失败: {exc}") from exc
+            if ret != RET_OK:
+                raise DataSourceTransientError(f"Futu OpenD 返回错误: {data}")
+            try:
+                bars = _df_to_bars_newest_first(
+                    data, n, self._symbol.split(".", 1)[0], self._timeframe
+                )
+            except Exception as exc:
+                raise DataSourceTransientError(f"Futu K线数据解析失败: {exc}") from exc
+            self._refresh_market_summary()
+            if not bars:
+                raise DataSourceTransientError(f"Futu 未返回数据: {self._symbol} {self._timeframe}")
+            return bars
 
     def search_news(self, keyword: str) -> list[dict[str, object]]:
         """Return OpenD's embedded news summaries without opening article URLs."""

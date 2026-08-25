@@ -122,7 +122,7 @@ def test_second_order_data_settings_round_trip(tmp_path):
             "sector_code": "SZ.BK0002",
         }
     }
-    original.second_order.dsa_database_path = "dsa/data"
+    original.second_order.dsa_database_path = r"E:\Daily stock analysis\data"
     original.second_order.run_news_prefetch_enabled = False
     original.second_order.run_material_preanalysis_enabled = False
     original.second_order.news_prefetch_enabled = True
@@ -143,7 +143,7 @@ def test_second_order_data_settings_round_trip(tmp_path):
     assert loaded.second_order.sector_code == "sh.bk0001"
     assert loaded.second_order.symbol_preferences["SZ.159732"]["sector_name"] == "消费电子"
     assert loaded.second_order.symbol_preferences["SZ.159732"]["sector_code"] == "SZ.BK0002"
-    assert loaded.second_order.dsa_database_path == "dsa/data"
+    assert loaded.second_order.dsa_database_path == r"E:\Daily stock analysis\data"
     assert loaded.second_order.run_news_prefetch_enabled is False
     assert loaded.second_order.run_material_preanalysis_enabled is False
     assert loaded.second_order.news_prefetch_enabled is True

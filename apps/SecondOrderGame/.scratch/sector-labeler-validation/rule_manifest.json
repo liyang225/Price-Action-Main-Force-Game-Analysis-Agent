@@ -1,0 +1,68 @@
+{
+  "schema_version": "1",
+  "frozen_at": "2026-08-12",
+  "rule_config": {
+    "path": "config/sector_labeler.yaml",
+    "version": 1,
+    "canonical_sha256": "b36718dcbc61cedbacd982c98ded6c09331274ae2c0951c96e84580fc455bb8f"
+  },
+  "evidence": {
+    "annotation_path": ".scratch/sector-labeler-validation/annotation_sheet_v1.csv",
+    "annotation_sha256": "9e74c92e14c1769f362f2a37501108ee3b417348cd0f9525c1f809bf4b98beb7",
+    "ohlcv_path": ".scratch/sector-labeler-validation/sector_ohlcv.csv.gz",
+    "ohlcv_sha256": "8d7ed9d65bfdba8c6b768c6d967103dded35f6eaab71047f251adb7105f40f65",
+    "annotation_count": 75,
+    "sector_count": 12,
+    "date_range": ["2020-11-19", "2026-07-02"],
+    "manual_distribution": {
+      "冰点": 13,
+      "启动": 17,
+      "发酵": 14,
+      "高潮": 15,
+      "退潮": 16
+    },
+    "machine_distribution": {
+      "冰点": 15,
+      "启动": 15,
+      "发酵": 15,
+      "高潮": 15,
+      "退潮": 15
+    },
+    "agreement": 0.56,
+    "systematic_biases": [],
+    "top_confusions": [
+      {"manual": "启动", "machine": "发酵", "count": 8},
+      {"manual": "发酵", "machine": "启动", "count": 6},
+      {"manual": "冰点", "machine": "退潮", "count": 5},
+      {"manual": "退潮", "machine": "冰点", "count": 4},
+      {"manual": "启动", "machine": "冰点", "count": 3}
+    ]
+  },
+  "full_history": {
+    "row_count": 19200,
+    "eligible_count": 18840,
+    "labeled_count": 1263,
+    "unlabeled_count": 17577,
+    "data_insufficient_count": 360,
+    "eligible_coverage": 0.06703821656050955,
+    "multiple_candidate_count": 0,
+    "label_distribution": {
+      "冰点": 337,
+      "启动": 651,
+      "发酵": 213,
+      "高潮": 33,
+      "退潮": 29
+    }
+  },
+  "decision": {
+    "thresholds_changed_after_annotation": false,
+    "reason": "All five states are represented and confusions are concentrated at adjacent cycle boundaries; the rules were not fit back to the 75-row validation sample."
+  },
+  "shadow_v2_cutover": {
+    "required_history_days_per_sector": 5,
+    "required_stable_trading_days": 3,
+    "relabel_history_on_cutover": true,
+    "rebuild_independent_c_counts": true,
+    "atomic_switch": true
+  }
+}

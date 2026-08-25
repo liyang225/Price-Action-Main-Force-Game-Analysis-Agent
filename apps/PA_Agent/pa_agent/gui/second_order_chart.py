@@ -27,6 +27,9 @@ _TEXT = "#F4F7FA"
 class SecondOrderGameChart(ChartWidget):
     """K-line chart with chart-only game-signal history and no EMA overlay."""
 
+    _candle_vertical_scale = 0.50
+    _fit_visible_bars = 35
+
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setObjectName("secondOrderGameChart")

@@ -1,0 +1,92 @@
+version: "candidate-2026-08-10"
+# Change this one value to replay the same masks against absolute or
+# sector-relative forward returns.  Thresholds below are deliberately
+# candidates for study; they are not yet frozen production definitions.
+forward_return_feature: forward_excess_return
+
+thresholds:
+  accumulation_current_return_max: 0.02
+  accumulation_current_return_min: -0.02
+  accumulation_forward_min: 0.03
+  accumulation_volume_ratio_max: 1.60
+  accumulation_close_position_min: 0.45
+
+  shakeout_current_return_max: -0.02
+  shakeout_forward_min: 0.02
+  shakeout_lower_shadow_min: 0.25
+  shakeout_rebound_min: 0.03
+  shakeout_support_break_min: -0.005
+  shakeout_volume_ratio_max: 1.20
+
+  markup_current_return_min: 0.03
+  markup_forward_min: 0.05
+  markup_volume_ratio_min: 1.15
+  markup_close_position_min: 0.60
+  markup_resistance_break_min: 0.0
+
+  distribution_current_return_max: 0.02
+  distribution_current_return_min: -0.02
+  distribution_forward_max: -0.03
+  distribution_volume_ratio_min: 1.20
+  distribution_upper_shadow_min: 0.25
+  distribution_resistance_break_min: -0.02
+
+  watch_current_abs_max: 0.01
+  watch_forward_abs_max: 0.02
+  watch_volume_ratio_max: 1.30
+
+  stop_hunt_current_return_max: -0.01
+  stop_hunt_forward_min: 0.015
+  stop_hunt_support_break_max: -0.005
+  stop_hunt_lower_shadow_min: 0.30
+  stop_hunt_rebound_min: 0.02
+  stop_hunt_volume_ratio_min: 1.20
+
+rules:
+  建仓:
+    all:
+      - {feature: return_1d, op: gte, threshold: accumulation_current_return_min}
+      - {feature: return_1d, op: lte, threshold: accumulation_current_return_max}
+      - {feature: forward_return, op: gte, threshold: accumulation_forward_min}
+      - {feature: volume_ratio_20, op: lte, threshold: accumulation_volume_ratio_max}
+      - {feature: close_position, op: gte, threshold: accumulation_close_position_min}
+  震仓:
+    all:
+      - {feature: return_1d, op: lte, threshold: shakeout_current_return_max}
+      - {feature: forward_return, op: gte, threshold: shakeout_forward_min}
+      - {feature: lower_shadow_ratio, op: gte, threshold: shakeout_lower_shadow_min}
+      - {feature: future_rebound_return, op: gte, threshold: shakeout_rebound_min}
+      - {feature: support_break_pct, op: gt, threshold: shakeout_support_break_min}
+      - {feature: volume_ratio_20, op: lte, threshold: shakeout_volume_ratio_max}
+  拉升:
+    all:
+      - {feature: return_1d, op: gte, threshold: markup_current_return_min}
+      - {feature: forward_return, op: gte, threshold: markup_forward_min}
+      - {feature: volume_ratio_20, op: gte, threshold: markup_volume_ratio_min}
+      - {feature: close_position, op: gte, threshold: markup_close_position_min}
+      - {feature: resistance_break_pct, op: gte, threshold: markup_resistance_break_min}
+  出货:
+    all:
+      - {feature: return_1d, op: gte, threshold: distribution_current_return_min}
+      - {feature: return_1d, op: lte, threshold: distribution_current_return_max}
+      - {feature: forward_return, op: lte, threshold: distribution_forward_max}
+      - {feature: volume_ratio_20, op: gte, threshold: distribution_volume_ratio_min}
+      - {feature: upper_shadow_ratio, op: gte, threshold: distribution_upper_shadow_min}
+      - {feature: resistance_break_pct, op: gte, threshold: distribution_resistance_break_min}
+  观望:
+    all:
+      - {feature: return_1d, op: abs_lte, threshold: watch_current_abs_max}
+      - {feature: forward_return, op: abs_lte, threshold: watch_forward_abs_max}
+      - {feature: volume_ratio_20, op: lte, threshold: watch_volume_ratio_max}
+  狩猎止损:
+    all:
+      - {feature: return_1d, op: lte, threshold: stop_hunt_current_return_max}
+      - {feature: forward_return, op: gte, threshold: stop_hunt_forward_min}
+      - {feature: support_break_pct, op: lte, threshold: stop_hunt_support_break_max}
+      - {feature: lower_shadow_ratio, op: gte, threshold: stop_hunt_lower_shadow_min}
+      - {feature: future_rebound_return, op: gte, threshold: stop_hunt_rebound_min}
+      - {feature: volume_ratio_20, op: gte, threshold: stop_hunt_volume_ratio_min}
+
+# Most-specific structural patterns win over broad fallback rules.  This is
+# study output policy only; it never splits one day into fractional counts.
+priority: [狩猎止损, 震仓, 拉升, 出货, 建仓, 观望]

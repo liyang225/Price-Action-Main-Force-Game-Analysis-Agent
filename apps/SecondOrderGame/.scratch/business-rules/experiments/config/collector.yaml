@@ -1,0 +1,27 @@
+start_date: "2020-01-01"
+end_date: "2026-08-10"
+benchmark_code: "SH.000300"
+top_n_per_plate: 5
+listed_by: "2022-01-01"
+required_status: "NORMAL"
+exclude_name_patterns: ["ST", "退"]
+snapshot_batch_size: 400
+max_count: 1000
+first_page_interval_seconds: 0.55
+plate_markets: ["SH", "SZ"]
+
+# The codes are examples captured from the configured industry plate pool;
+# select_configured_plates still validates each against get_plate_list output.
+industry_plates:
+  - {code: "SH.LIST0002", name: "半导体"}
+  - {code: "SH.LIST0931", name: "白酒Ⅱ"}
+  - {code: "SH.LIST0949", name: "股份制银行Ⅱ"}
+  - {code: "SH.LIST0047", name: "证券Ⅱ"}
+  - {code: "SH.LIST0026", name: "房地产开发"}
+  - {code: "SH.LIST0006", name: "电力"}
+  - {code: "SH.LIST0068", name: "医疗服务"}
+  - {code: "SH.LIST0924", name: "乘用车"}
+  - {code: "SH.LIST0953", name: "光伏设备"}
+  - {code: "SH.LIST0960", name: "软件开发"}
+  - {code: "SH.LIST0967", name: "煤炭开采"}
+  - {code: "SH.LIST0055", name: "食品加工"}

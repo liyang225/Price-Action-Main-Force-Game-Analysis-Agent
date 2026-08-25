@@ -11,7 +11,10 @@
 
 **请勿在公开 Issue 中粘贴 API Key、加密后的 `api_key_encrypted`、完整 `settings.json` 或含个人账号信息的分析记录。**
 
-请通过 GitHub **Security Advisories**（仓库 → Security → Report a vulnerability）私密报告。
+请通过以下方式私下联系维护者：
+
+- GitHub：**Security Advisories**（仓库 → Security → Report a vulnerability），或
+- QQ 群（见 README）私信维护者
 
 报告中请尽量包含：
 

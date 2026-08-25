@@ -19,12 +19,14 @@ pytest.importorskip("PyQt6")
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt6.QtWidgets import QLabel  # noqa: E402
+from PyQt6.QtCore import QEvent  # noqa: E402
+from PyQt6.QtWidgets import QApplication, QLabel, QPlainTextEdit, QPushButton  # noqa: E402
 
 from pa_agent.gui.second_order_cards import (  # noqa: E402
     PrototypeAnalysisPanel,
     _BehaviorBars,
     _BeliefBar,
+    _FourColumnGrid,
     _RangeBar,
     _ScenarioCards,
     _SummaryBand,
@@ -74,6 +76,25 @@ _EMPTY_PRIORS = {
     },
 }
 
+_POSTERIORS = {
+    "主力": {
+        "建仓": 0.45,
+        "震仓": 0.11,
+        "拉升": 0.28,
+        "出货": 0.05,
+        "观望": 0.09,
+        "狩猎止损": 0.02,
+    },
+    "散户": {
+        "FOMO追高": 0.14,
+        "恐慌割肉": 0.11,
+        "观望": 0.21,
+        "理性跟随": 0.24,
+        "底部建仓": 0.23,
+        "高位减仓": 0.07,
+    },
+}
+
 
 # ---------------------------------------------------------------------------
 # _SummaryBand
@@ -83,7 +104,7 @@ def test_summary_band_renders_value_label_status_note(qtbot) -> None:
     band = _SummaryBand(50.0, label="情绪指数", status_text="已计算", note="消息增量 +0.42")
     qtbot.addWidget(band)
     texts = _label_texts(band)
-    assert "50.0" in texts
+    assert "50.00" in texts
     assert "情绪指数" in texts
     assert "已计算" in texts
     assert "消息增量 +0.42" in texts
@@ -221,21 +242,21 @@ def test_scenario_cards_renders_main_and_alternatives(qtbot) -> None:
     branches = [
         {
             "情景": "符合预期",
-            "该情景明天开盘概率": "99.7%",
+            "下一完整时段概率": "99.7%",
             "开盘首次下跌达止损概率": "暂无数据",
             "状态": "待确认",
             "应对": "保持观望，不因小波动行动",
         },
         {
             "情景": "超预期强",
-            "该情景明天开盘概率": "0.1%",
+            "下一完整时段概率": "0.1%",
             "开盘首次下跌达止损概率": "暂无数据",
             "状态": "待确认",
             "应对": "不追高，防范脉冲回落",
         },
         {
             "情景": "低于预期",
-            "该情景明天开盘概率": "0.1%",
+            "下一完整时段概率": "0.1%",
             "开盘首次下跌达止损概率": "暂无数据",
             "状态": "待确认",
             "应对": "弱承接则回避，破位离场",
@@ -248,6 +269,7 @@ def test_scenario_cards_renders_main_and_alternatives(qtbot) -> None:
     assert "符合预期" in texts
     assert "超预期强" in texts and "低于预期" in texts
     assert "保持观望，不因小波动行动" in texts
+    assert "下一时段概率" in texts
 
 
 def test_scenario_cards_empty_renders_placeholder(qtbot) -> None:
@@ -296,7 +318,7 @@ def test_cycle_page_maps_contract_fields(qtbot) -> None:
         {"raw": True},
     )
     texts = _label_texts(panel)
-    assert "50.0" in texts
+    assert "50.00" in texts
     assert "已计算" in texts
     assert "0.40" in texts  # news_delta 0.4 -> 0.40
     assert "发酵" in texts  # LLM 观测
@@ -325,6 +347,8 @@ def test_cycle_page_pending_status_maps_to_waiting(qtbot) -> None:
 def test_game_page_maps_contract_fields(qtbot) -> None:
     panel = PrototypeAnalysisPanel("game")
     qtbot.addWidget(panel)
+    panel.resize(1200, 800)
+    panel.show()
     panel.set_payload(
         {
             "程序化博弈信号": {
@@ -344,6 +368,7 @@ def test_game_page_maps_contract_fields(qtbot) -> None:
             },
             "参与者识别": {"participant": "散户", "key_evidence": ["成交量未放大，情绪指数中性"]},
             "参与者先验": _PRIORS,
+            "参与者后验": _POSTERIORS,
             "主导参与者行为推演": {
                 "散户": {"model_behavior": "观望", "probabilities": {"观望": 0.258, "底部建仓": 0.25}, "prior_weight": 1.0}
             },
@@ -358,19 +383,36 @@ def test_game_page_maps_contract_fields(qtbot) -> None:
     assert "主导参与者" in texts
     assert "36.1%" in texts
     assert "25.8%" in texts
-    assert panel._cards_layout.count() == 5  # 4 卡 + stretch
+    assert "当下参与者行为推断（HMM行为先验）" in texts
+    assert "该参与者下一步博弈行为推演" in texts
+    assert "45.0%" in texts
+    assert "24.0%" in texts
+    forecast_grid = panel.findChild(_FourColumnGrid)
+    assert forecast_grid is not None
+    assert forecast_grid.layout_.count() == 4
+    qtbot.wait(20)
+    cards = [forecast_grid.layout_.itemAt(index).widget() for index in range(4)]
+    assert len({card.y() for card in cards}) == 1
+    assert all(card.width() > 0 for card in cards)
+    assert {forecast_grid.layout_.itemAt(index).widget().layout().itemAt(0).widget().text() for index in range(4)} == {
+        "参与者",
+        "该参与者下一步博弈行为推演",
+        "行为概率",
+        "先验权重",
+    }
 
 
 def test_game_page_empty_payload_renders_full_skeleton(qtbot) -> None:
     panel = PrototypeAnalysisPanel("game", "等待推演…")
     qtbot.addWidget(panel)
     texts = _label_texts(panel)
-    assert "程序化博弈信号" in texts
+    assert "纳什均衡带" in texts
     assert "参与者识别" in texts
-    assert "HMM 行为先验（政策环境修正）" in texts
+    assert "当下参与者行为推断（HMM行为先验）" in texts
+    assert "HMM 行为后验" in texts
     assert "主导参与者行为推演" in texts
     assert "建仓" in texts and "FOMO追高" in texts  # 行为条骨架
-    assert panel._cards_layout.count() == 5
+    assert panel._cards_layout.count() >= 2
 
 
 def test_tree_page_maps_contract_fields(qtbot) -> None:
@@ -381,21 +423,21 @@ def test_tree_page_maps_contract_fields(qtbot) -> None:
             "B/C三情景概率": [
                 {
                     "情景": "符合预期",
-                    "该情景明天开盘概率": "99.7%",
+                    "下一完整时段概率": "99.7%",
                     "开盘首次下跌达止损概率": "暂无数据",
                     "状态": "待确认",
                     "应对": "保持观望",
                 },
                 {
                     "情景": "超预期强",
-                    "该情景明天开盘概率": "0.1%",
+                    "下一完整时段概率": "0.1%",
                     "开盘首次下跌达止损概率": "暂无数据",
                     "状态": "待确认",
                     "应对": "不追高",
                 },
                 {
                     "情景": "低于预期",
-                    "该情景明天开盘概率": "0.1%",
+                    "下一完整时段概率": "0.1%",
                     "开盘首次下跌达止损概率": "暂无数据",
                     "状态": "待确认",
                     "应对": "回避",
@@ -417,6 +459,29 @@ def test_tree_page_empty_renders_three_scenario_placeholders(qtbot) -> None:
     for name in ("符合预期", "超预期强", "低于预期"):
         assert name in texts
     assert texts.count("—") >= 3  # 三张卡概率占位
+
+
+def test_tree_page_trade_rules_toggle_edit_and_save(qtbot) -> None:
+    saved: list[str] = []
+    panel = PrototypeAnalysisPanel("tree")
+    qtbot.addWidget(panel)
+    panel.set_trade_rules("初始规则", lambda text: saved.append(text) or True)
+
+    editor = panel.findChildren(QPlainTextEdit, "secondOrderTradeRulesInput")[-1]
+    action = panel.findChildren(QPushButton, "secondOrderTradeRulesAction")[-1]
+    assert editor.isReadOnly()
+    assert action.text() == "修改"
+    assert "我的交易规则" in _label_texts(panel)
+
+    action.click()
+    assert not editor.isReadOnly()
+    assert action.text() == "保存"
+    editor.setPlainText("单笔亏损不超过总资金的 1%。")
+    action.click()
+
+    assert saved == ["单笔亏损不超过总资金的 1%。"]
+    assert editor.isReadOnly()
+    assert action.text() == "修改"
 
 
 def test_sector_page_maps_contract_fields(qtbot) -> None:
@@ -476,6 +541,35 @@ def test_sector_page_maps_contract_fields(qtbot) -> None:
     assert "36.1%" in texts
     assert "新闻A" in texts
     assert panel._cards_layout.count() == 5  # 4 卡 + stretch
+
+
+def test_sector_data_cards_precede_policy_environment(qtbot) -> None:
+    panel = PrototypeAnalysisPanel("sector")
+    qtbot.addWidget(panel)
+    panel.set_grouped_payload(
+        [
+            [("板块结构", {"sector_name": "半导体"}, 3)],
+            [("政策环境", "政策暖风", 1)],
+        ],
+        {},
+    )
+    panel.set_table_sections(
+        [
+            {"title": "资金流向", "headers": [], "rows": []},
+            {"title": "连板信息", "headers": [], "rows": []},
+            {"title": "龙虎榜", "headers": [], "rows": []},
+        ]
+    )
+    QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+    assert panel._cards_layout.indexOf(panel._sector_grid) >= 0
+    layout = panel._sector_grid.layout_
+    assert "资金流向" in _label_texts(layout.itemAtPosition(0, 0).widget())
+    assert "连板信息" in _label_texts(layout.itemAtPosition(1, 0).widget())
+    assert "龙虎榜" in _label_texts(layout.itemAtPosition(1, 1).widget())
+    assert "板块状态" in _label_texts(layout.itemAtPosition(2, 0).widget())
+    assert "结构结论" in _label_texts(layout.itemAtPosition(3, 0).widget())
+    assert "政策环境" in _label_texts(layout.itemAtPosition(4, 0).widget())
 
 
 def test_market_page_maps_contract_fields(qtbot) -> None:

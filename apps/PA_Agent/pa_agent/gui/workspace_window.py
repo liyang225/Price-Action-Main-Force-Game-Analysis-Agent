@@ -6,7 +6,16 @@ import threading
 import time
 from typing import Callable
 
-from PyQt6.QtCore import QEvent, QPoint, QRect, QThread, QTimer, Qt, pyqtSignal
+from PyQt6.QtCore import (
+    QEvent,
+    QEventLoop,
+    QPoint,
+    QRect,
+    QThread,
+    QTimer,
+    Qt,
+    pyqtSignal,
+)
 from PyQt6.QtGui import QAction, QBrush, QColor
 from PyQt6.QtWidgets import (
     QAbstractItemView,
@@ -16,6 +25,7 @@ from PyQt6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QFrame,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -23,6 +33,7 @@ from PyQt6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QMenu,
+    QProgressBar,
     QPushButton,
     QRubberBand,
     QSplitter,
@@ -191,6 +202,49 @@ class _WatchlistQuoteWorker(QThread):
             for _signature, source in tuple(self._sources.values()):
                 self._close_source(source)
             self._sources.clear()
+
+
+class _TerminalDataSourceWorker(QThread):
+    """Connect and subscribe one terminal's feed without blocking the GUI."""
+
+    ready = pyqtSignal()
+    failed = pyqtSignal(str)
+
+    def __init__(
+        self,
+        data_source: object,
+        symbol: str,
+        timeframe: str,
+        exchange: str,
+    ) -> None:
+        super().__init__()
+        self._data_source = data_source
+        self._symbol = symbol
+        self._timeframe = timeframe
+        self._exchange = exchange
+
+    def run(self) -> None:
+        started_at = time.perf_counter()
+        try:
+            self._data_source.connect()  # type: ignore[attr-defined]
+            setter = getattr(self._data_source, "set_exchange", None)
+            if callable(setter):
+                setter(self._exchange)
+            self._data_source.subscribe(self._symbol, self._timeframe)  # type: ignore[attr-defined]
+        except Exception as exc:  # noqa: BLE001
+            logger.info(
+                "Terminal data source setup failed for %s in %.1f ms",
+                self._symbol,
+                (time.perf_counter() - started_at) * 1000,
+            )
+            self.failed.emit(str(exc))
+            return
+        logger.info(
+            "Terminal data source ready for %s in %.1f ms",
+            self._symbol,
+            (time.perf_counter() - started_at) * 1000,
+        )
+        self.ready.emit()
 
 
 class _TerminalTabBar(QTabBar):
@@ -1332,6 +1386,104 @@ class WatchlistDashboard(QWidget):
         return data_source_label(kind)
 
 
+class _TerminalLoadingOverlay(QWidget):
+    """Centered loading card shown while a stock terminal is being created.
+
+    Terminal construction still has a small amount of unavoidable work on the
+    GUI thread (building the chart/sidebar tree and the isolated context).  A
+    full-page overlay gives that work an explicit visual state instead of
+    leaving the last page looking frozen.  The indeterminate bar intentionally
+    communicates activity, not a fabricated percentage.
+    """
+
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent)
+        self.setObjectName("terminalLoadingOverlay")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setCursor(Qt.CursorShape.WaitCursor)
+        self.setStyleSheet(
+            "QWidget#terminalLoadingOverlay {"
+            " background: rgba(12, 14, 17, 222);"
+            "}"
+            "QFrame#terminalLoadingCard {"
+            " background: #12151A;"
+            " border: 1px solid #333A45;"
+            " border-radius: 8px;"
+            "}"
+            "QLabel#terminalLoadingEyebrow {"
+            " color: #7FA6CF;"
+            " font-size: 11px;"
+            " font-weight: 600;"
+            " letter-spacing: 1px;"
+            "}"
+            "QLabel#terminalLoadingTitle {"
+            " color: #E8ECF1;"
+            " font-size: 16px;"
+            " font-weight: 600;"
+            "}"
+            "QLabel#terminalLoadingTarget, QLabel#terminalLoadingHint {"
+            " color: #9AA5B1;"
+            " font-size: 12px;"
+            "}"
+            "QProgressBar#terminalLoadingProgress {"
+            " background: #22272F;"
+            " border: none;"
+            " border-radius: 2px;"
+            " text-visible: false;"
+            "}"
+            "QProgressBar#terminalLoadingProgress::chunk {"
+            " background: #4A7EBB;"
+            " border-radius: 2px;"
+            "}"
+        )
+
+        card = QFrame(self)
+        card.setObjectName("terminalLoadingCard")
+        card.setFixedWidth(348)
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(24, 21, 24, 22)
+        layout.setSpacing(8)
+
+        eyebrow = QLabel("PA AGENT  ·  WORKSPACE")
+        eyebrow.setObjectName("terminalLoadingEyebrow")
+        layout.addWidget(eyebrow)
+
+        self._title = QLabel("正在打开分析窗口")
+        self._title.setObjectName("terminalLoadingTitle")
+        layout.addWidget(self._title)
+
+        self._target = QLabel()
+        self._target.setObjectName("terminalLoadingTarget")
+        self._target.setWordWrap(True)
+        layout.addWidget(self._target)
+
+        progress = QProgressBar()
+        progress.setObjectName("terminalLoadingProgress")
+        progress.setRange(0, 0)
+        progress.setTextVisible(False)
+        progress.setFixedHeight(4)
+        layout.addWidget(progress)
+
+        hint = QLabel("正在准备行情数据与分析组件，请稍候…")
+        hint.setObjectName("terminalLoadingHint")
+        layout.addWidget(hint)
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(16, 16, 16, 16)
+        root.addWidget(card, 0, Qt.AlignmentFlag.AlignCenter)
+
+    def show_for(self, item: WatchlistItem) -> None:
+        """Update the target label and reveal the overlay over the tab page."""
+        display_name = item.display_name.strip() or item.symbol
+        self._target.setText(f"{display_name}  ·  {item.symbol}")
+        self.setGeometry(self.parentWidget().rect())
+        self.raise_()
+        self.show()
+
+    def dismiss(self) -> None:
+        self.hide()
+
+
 class WorkspaceWindow(QMainWindow):
     """Top-level workspace that keeps analysis terminals in front-end tabs."""
 
@@ -1350,9 +1502,17 @@ class WorkspaceWindow(QMainWindow):
         self._ctx = ctx
         self._store = WatchlistStore()
         self._terminals: dict[str, QWidget] = {}
+        self._terminal_data_source_workers: dict[str, _TerminalDataSourceWorker] = {}
         self._quote_cache: dict[str, tuple[float | None, float | None]] = {}
         self._pool_tracking_item_ids: set[str] = set()
         self._pool_tracking_syncing = False
+        # Creating a terminal performs data-source setup and UI construction.
+        # Keep this work bounded to one item per event-loop turn so enabling
+        # continuous analysis cannot fan out a synchronous burst on the UI
+        # thread.
+        self._pool_terminal_queue: list[str] = []
+        self._pool_terminal_queue_active = False
+        self._terminal_loading_item_id: str | None = None
         settings = getattr(self._ctx, "settings", None)
         self._pool_tracking_enabled = bool(
             getattr(
@@ -1399,6 +1559,8 @@ class WorkspaceWindow(QMainWindow):
         self._dashboard.watchlist_item_deleted.connect(self._close_deleted_watchlist_terminal)
         self._dashboard.watchlist_item_updated.connect(self._close_deleted_watchlist_terminal)
         self._tabs.addTab(self._dashboard, "自选股")
+        self._terminal_loading_overlay = _TerminalLoadingOverlay(self._tabs)
+        self._terminal_loading_overlay.hide()
         tab_bar = self._tabs.tabBar()
         tab_bar.setTabVisible(0, False)
         self._update_tab_widget_layout()
@@ -1422,6 +1584,9 @@ class WorkspaceWindow(QMainWindow):
         super().resizeEvent(event)
         if hasattr(self, "_watchlist_tab_button"):
             self._position_watchlist_tab_button()
+        overlay = getattr(self, "_terminal_loading_overlay", None)
+        if overlay is not None and overlay.isVisible():
+            overlay.setGeometry(self._tabs.rect())
 
     def _position_watchlist_tab_button(self) -> None:
         self._watchlist_tab_button.move(4, 2)
@@ -1460,9 +1625,33 @@ class WorkspaceWindow(QMainWindow):
         menu.addAction(general_action)
 
     def _show_terminal(self, item_id: str) -> None:
-        terminal = self._ensure_terminal(item_id)
-        if terminal is None:
+        if getattr(self, "_terminal_loading_item_id", None) is not None:
             return
+        # Existing terminals can switch immediately.  Only the first open of
+        # a stock needs the loading card; this keeps tab-to-tab navigation
+        # feeling instant after the terminal has been constructed once.
+        terminal = self._terminals.get(item_id)
+        if terminal is None:
+            item = self._store.get(item_id)
+            if item is None:
+                return
+            overlay = getattr(self, "_terminal_loading_overlay", None)
+            if overlay is not None:
+                self._terminal_loading_item_id = item_id
+                overlay.show_for(item)
+                # Let Windows paint the card before the unavoidable terminal
+                # construction work starts on this GUI thread.
+                QApplication.processEvents(
+                    QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents
+                )
+            try:
+                terminal = self._ensure_terminal(item_id)
+            finally:
+                self._terminal_loading_item_id = None
+                if overlay is not None:
+                    overlay.dismiss()
+            if terminal is None:
+                return
         # Suppress painting while QTabWidget assigns the final page geometry;
         # otherwise Windows may expose the terminal at its tiny construction
         # size for one frame, including an unnecessary vertical scrollbar.
@@ -1486,17 +1675,16 @@ class WorkspaceWindow(QMainWindow):
             return
         added_ids = self._store.add_to_analysis_pool(item_ids)
         if self._pool_tracking_enabled:
-            self._pool_tracking_syncing = True
-            try:
-                # A terminal added after the pool switch was enabled must
-                # inherit the current tracking state like existing members.
+            self._pool_tracking_item_ids.update(added_ids)
+            if "_pool_terminal_queue" in getattr(self, "__dict__", {}):
+                self._queue_pool_terminals(added_ids)
+            else:
+                # Keep partially constructed test/dummy instances usable;
+                # real WorkspaceWindow instances always take the queued path.
                 for item_id in added_ids:
                     terminal = self._ensure_terminal(item_id)
                     if terminal is not None:
                         terminal.set_workspace_continuous_tracking(True)  # type: ignore[attr-defined]
-                        self._pool_tracking_item_ids.add(item_id)
-            finally:
-                self._pool_tracking_syncing = False
         self._refresh_dashboard()
 
     def _batch_analyze(self, item_ids: list[str]) -> None:
@@ -1529,6 +1717,7 @@ class WorkspaceWindow(QMainWindow):
         self._refresh_dashboard()
 
     def _close_deleted_watchlist_terminal(self, item_id: str) -> None:
+        self._pool_terminal_queue = [queued_id for queued_id in self._pool_terminal_queue if queued_id != item_id]
         terminal = self._terminals.pop(item_id, None)
         self._pool_tracking_item_ids.discard(item_id)
         if terminal is not None:
@@ -1549,22 +1738,55 @@ class WorkspaceWindow(QMainWindow):
     def _set_pool_tracking(self, enabled: bool, *, announce: bool = True) -> None:
         enabled = bool(enabled)
         self._pool_tracking_enabled = enabled
+        getattr(self, "_pool_terminal_queue", []).clear()
         pool_ids = set(self._store.analysis_pool_ids)
         self._pool_tracking_item_ids = pool_ids if enabled else set()
         self._pool_tracking_syncing = True
         try:
             for item in self._store.analysis_pool_items():
-                terminal = self._ensure_terminal(item.id)
+                terminal = self._terminals.get(item.id)
                 if terminal is not None:
                     terminal.set_workspace_continuous_tracking(enabled)  # type: ignore[attr-defined]
         finally:
             self._pool_tracking_syncing = False
+        if enabled:
+            self._queue_pool_terminals(pool_ids)
         self._sync_pool_tracking_switch()
         if announce:
             self.statusBar().showMessage(
-                "分析池持续分析已开启" if enabled else "分析池持续分析已停止"
+                ("分析池持续分析已开启，正在按队列加载窗口…" if enabled else "分析池持续分析已停止")
             )
         self._refresh_dashboard()
+
+    def _queue_pool_terminals(self, item_ids: set[str] | list[str]) -> None:
+        """Schedule at most one expensive terminal construction per turn."""
+        if not self._pool_tracking_enabled:
+            return
+        queued = set(self._pool_terminal_queue)
+        for item_id in item_ids:
+            if item_id not in self._terminals and item_id not in queued:
+                self._pool_terminal_queue.append(item_id)
+                queued.add(item_id)
+        if self._pool_terminal_queue and not self._pool_terminal_queue_active:
+            self._pool_terminal_queue_active = True
+            QTimer.singleShot(0, self._drain_pool_terminal_queue)
+
+    def _drain_pool_terminal_queue(self) -> None:
+        if not self._pool_tracking_enabled or not self._pool_terminal_queue:
+            self._pool_terminal_queue_active = False
+            return
+        item_id = self._pool_terminal_queue.pop(0)
+        self._pool_tracking_syncing = True
+        try:
+            terminal = self._ensure_terminal(item_id)
+            if terminal is not None:
+                terminal.set_workspace_continuous_tracking(True)  # type: ignore[attr-defined]
+        finally:
+            self._pool_tracking_syncing = False
+        if self._pool_terminal_queue:
+            QTimer.singleShot(0, self._drain_pool_terminal_queue)
+        else:
+            self._pool_terminal_queue_active = False
 
     def _sync_pool_tracking_switch(self) -> None:
         """Reflect whether any current analysis-pool stock is still active."""
@@ -1598,12 +1820,18 @@ class WorkspaceWindow(QMainWindow):
         item = self._store.get(item_id)
         if item is None:
             return None
+        started_at = time.perf_counter()
         try:
             terminal = self._create_terminal(item)
         except Exception as exc:  # noqa: BLE001
             logger.exception("Unable to create terminal for %s", item.symbol)
             QMessageBox.warning(self, "无法创建分析窗口", f"{item.symbol}: {exc}")
             return None
+        logger.info(
+            "Terminal UI constructed for %s in %.1f ms",
+            item.symbol,
+            (time.perf_counter() - started_at) * 1000,
+        )
         self._terminals[item_id] = terminal
         terminal.setUpdatesEnabled(False)
         index_before_add = self._tabs.currentIndex()
@@ -1623,7 +1851,48 @@ class WorkspaceWindow(QMainWindow):
         )
         terminal.analysis_state_changed.connect(lambda _active: self._refresh_dashboard())  # type: ignore[attr-defined]
         terminal.order_opportunity_changed.connect(lambda _has: self._refresh_dashboard())  # type: ignore[attr-defined]
+        self._start_terminal_data_source_setup(item_id, terminal, item)
         return terminal
+
+    def _start_terminal_data_source_setup(
+        self,
+        item_id: str,
+        terminal: QWidget,
+        item: WatchlistItem,
+    ) -> None:
+        """Move the initial OpenD/market-data handshake off the GUI thread."""
+        data_source = getattr(getattr(terminal, "_ctx", None), "data_source", None)
+        if data_source is None or getattr(data_source, "_connected", False):
+            return
+        old_worker = self._terminal_data_source_workers.pop(item_id, None)
+        if old_worker is not None and old_worker.isRunning():
+            return
+        worker = _TerminalDataSourceWorker(
+            data_source,
+            item.symbol,
+            item.timeframe,
+            item.exchange,
+        )
+        self._terminal_data_source_workers[item_id] = worker
+
+        def _finished() -> None:
+            if self._terminal_data_source_workers.get(item_id) is worker:
+                self._terminal_data_source_workers.pop(item_id, None)
+            if not getattr(terminal, "_window_closing", False):
+                if getattr(terminal, "workspace_continuous_tracking_enabled", lambda: False)():
+                    terminal._ensure_refresh_loop_running()  # type: ignore[attr-defined]
+                self._refresh_dashboard()
+            worker.deleteLater()
+
+        def _failed(message: str) -> None:
+            logger.warning("Terminal data source setup failed for %s: %s", item.symbol, message)
+            if getattr(terminal, "_ui_is_alive", lambda: False)():
+                terminal._status_bar.showMessage("行情连接失败，稍后可重试")  # type: ignore[attr-defined]
+            _finished()
+
+        worker.ready.connect(_finished)
+        worker.failed.connect(_failed)
+        worker.start()
 
     def _create_terminal(self, item: WatchlistItem):
         """Create an isolated context so each pool member owns its data feed."""
@@ -1654,14 +1923,6 @@ class WorkspaceWindow(QMainWindow):
         settings.general.keep_analysis = False
 
         data_source = create_data_source(kind)
-        try:
-            data_source.connect()
-            setter = getattr(data_source, "set_exchange", None)
-            if callable(setter):
-                setter(item.exchange)
-            data_source.subscribe(item.symbol, item.timeframe)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Initial subscription failed for %s: %s", item.symbol, exc)
 
         event_bus = EventBus()
         exp_reader = ExperienceReader(experience_dir=EXPERIENCE_DIR, logger=self._ctx.logger)
@@ -1825,6 +2086,10 @@ class WorkspaceWindow(QMainWindow):
         self._refresh_timer.stop()
         self._quote_worker.stop()
         self._quote_worker.wait(10_000)
+        for worker in tuple(self._terminal_data_source_workers.values()):
+            worker.requestInterruption()
+            worker.wait(10_000)
+        self._terminal_data_source_workers.clear()
         for terminal in tuple(self._terminals.values()):
             terminal.close()
         data_source = getattr(self._ctx, "data_source", None)

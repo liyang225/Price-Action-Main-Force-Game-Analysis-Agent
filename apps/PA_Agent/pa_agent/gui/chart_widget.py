@@ -34,10 +34,10 @@ _NO_ORDER_TEXT = "不下单"
 _X_MARGIN_BARS = 0.65
 _Y_PADDING_RATIO = 0.07
 _Y_TOP_EXTRA_RATIO = 0.04
-# Keep candles slightly shorter than a fully tight auto-fit while retaining
-# enough visible history for technical context.
-_CANDLE_VERTICAL_SCALE = 0.50
-_FIT_VISIBLE_BARS = 28
+# Technical-analysis K-lines use their full requested vertical scale.
+# SecondOrderGame overrides this value independently.
+_CANDLE_VERTICAL_SCALE = 0.75
+_FIT_VISIBLE_BARS = 26
 _AXIS_RESIZE_MIN_WIDTH = 40
 _AXIS_RESIZE_EDGE_PX = 8
 _DAY_LABEL_MIN_SPACING_PX = 96.0
@@ -223,6 +223,8 @@ class ChartWidget(pg.PlotWidget):
     axis_width_changed = pyqtSignal(int)
     hover_x_changed = pyqtSignal(object)
     chart_dragging_changed = pyqtSignal(bool)
+    _candle_vertical_scale = _CANDLE_VERTICAL_SCALE
+    _fit_visible_bars = _FIT_VISIBLE_BARS
 
     def __init__(self, parent=None) -> None:
         self._time_axis = _KlineTimeAxis()
@@ -838,10 +840,10 @@ class ChartWidget(pg.PlotWidget):
         self,
         frame: "KlineFrame",
     ) -> tuple[tuple[float, float], tuple[float, float]]:
-        """Compute (x_range, y_range) for the newest ``_FIT_VISIBLE_BARS`` bars."""
+        """Compute (x_range, y_range) for this chart's visible-bar window."""
         bars = frame.bars
         n = len(bars)
-        visible_count = min(_FIT_VISIBLE_BARS, n)
+        visible_count = min(self._fit_visible_bars, n)
         visible_bars = bars[:visible_count]
         visible_series: list[Sequence[float]] = []
         if self._ema_enabled:
@@ -886,13 +888,13 @@ class ChartWidget(pg.PlotWidget):
         y_top = span * _Y_TOP_EXTRA_RATIO
 
         # x=0 is oldest; newest bar is at x=n-1 — show only the rightmost window.
-        x_left = float(max(0, n - _FIT_VISIBLE_BARS))
+        x_left = float(max(0, n - self._fit_visible_bars))
         x_min = x_left - _X_MARGIN_BARS
         x_max = float(n - 1) + _X_MARGIN_BARS
         view_y_min = y_min - y_pad
         view_y_max = y_max + y_pad + y_top
         view_mid = (view_y_min + view_y_max) / 2.0
-        scaled_half_span = (view_y_max - view_y_min) / (2.0 * _CANDLE_VERTICAL_SCALE)
+        scaled_half_span = (view_y_max - view_y_min) / (2.0 * self._candle_vertical_scale)
         return (
             (x_min, x_max),
             (view_mid - scaled_half_span, view_mid + scaled_half_span),

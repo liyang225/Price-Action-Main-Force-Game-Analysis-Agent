@@ -49,4 +49,4 @@ powershell -ExecutionPolicy Bypass -File tools\setup_git_secrets.ps1
 - Bug：附上日志片段（`logs/pa_agent.log`）、复现步骤、品种/周期
 - 功能建议：说明使用场景与期望行为
 
-讨论与交流请使用 GitHub Issues 或 Discussions。
+讨论与交流也可加入 README 中的 QQ 群。

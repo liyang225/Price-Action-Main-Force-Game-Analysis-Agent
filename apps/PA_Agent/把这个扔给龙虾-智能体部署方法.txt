@@ -23,7 +23,8 @@ Agent 在执行任何部署步骤之前，必须先检测当前操作系统：
 【重要：项目路径】
 本文档中 PROJECT_ROOT 代表 PA_Agent 项目的根目录。
 执行前必须先确定项目实际路径，后续所有命令中的 PROJECT_ROOT 都替换为实际路径。
-将 PROJECT_ROOT 设为当前 PA_Agent 项目根目录。
+例如：用户项目在 D:\cl\PA_Agent，则 PROJECT_ROOT = D:\cl\PA_Agent
+      用户项目在 C:\Users\张三\Desktop\PA_Agent，则 PROJECT_ROOT = C:\Users\张三\Desktop\PA_Agent
 
 确定方法：找到项目中存在 pa_agent\main.py 和 pyproject.toml 的那个目录，就是 PROJECT_ROOT。
 Agent 执行时可用以下命令自动定位：

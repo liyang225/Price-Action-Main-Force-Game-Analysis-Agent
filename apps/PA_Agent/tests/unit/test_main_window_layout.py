@@ -692,15 +692,17 @@ def test_second_order_result_cards_and_llm_audit_follow_requested_layout(qtbot, 
     assert cycle_names[0] == "情绪指数"
     for expected in ("状态", "来源", "DSA 数据日期", "本次决策日期", "市场结论"):
         assert expected in market_names, f"market panel missing {expected!r}: {market_names}"
-    assert sector_names[0] == "政策环境"
+    assert sector_names[0] == "板块状态"
     assert "板块状态" in sector_names
     assert "结构结论" in sector_names
     assert "政策环境" in sector_names
+    assert sector_names.index("板块状态") < sector_names.index("结构结论")
+    assert sector_names.index("结构结论") < sector_names.index("政策环境")
     assert "周期来源" not in sector_names
-    assert "HMM 行为先验" not in sector_names
+    assert "当下参与者行为推断（HMM行为先验）" not in sector_names
     assert "主导参与者行为推演" in game_names
-    assert "HMM 行为先验" in game_names
-    assert game_names.index("主导参与者行为推演") < game_names.index("HMM 行为先验")
+    assert "当下参与者行为推断（HMM行为先验）" in game_names
+    assert game_names.index("该参与者下一步博弈行为推演") < game_names.index("当下参与者行为推断（HMM行为先验）")
     formula_toggle = workspace._cycle.findChild(QToolButton, "formulaToggle")
     assert formula_toggle is not None
     assert not formula_toggle.isChecked()
@@ -716,6 +718,64 @@ def test_second_order_result_cards_and_llm_audit_follow_requested_layout(qtbot, 
     assert not workspace._sent_source_text.isHidden()
     assert "完整系统提示词" in workspace._sent_source_text.toPlainText()
     assert "完整用户原文" in workspace._sent_source_text.toPlainText()
+
+
+def test_second_order_rehandoff_preserves_live_result_for_same_pa_analysis(qtbot) -> None:
+    from pa_agent.app_context import AppContext
+    from pa_agent.gui.second_order_workspace import SecondOrderWorkspace
+
+    payload = {
+        "symbol": "SZ.159732",
+        "stock_name": "消费电子ETF华夏（SZ.159732）",
+        "sector_name": "消费电子",
+        "sector_code": "SH.BK0002",
+        "decision_point": "close",
+        "stage1_diagnosis": {"trend": "上升"},
+        "stage2_decision": {"decision": {"order_type": "买入"}},
+    }
+    envelope = {
+        "ok": True,
+        "result": {
+            "completed_at": "2026-08-18T15:01:00",
+            "input": {
+                "symbol": "SZ.159732",
+                "decision_point": "close",
+                "cycle_position": "发酵",
+                "materials": {
+                    "sector_analysis": {
+                        "sector_name": "消费电子",
+                        "sector_code": "SH.BK0002",
+                    },
+                    "news": {"items": []},
+                },
+            },
+            "scenario_tree": {
+                "analysis_metadata": {
+                    "participant_analysis": {"participant": "主力"}
+                },
+                "branches": [
+                    {
+                        "name": "符合预期",
+                        "a_class": {"主力": {"model_behavior": "拉升"}},
+                    }
+                ],
+            },
+            "integrated_gates": {},
+        },
+    }
+    workspace = SecondOrderWorkspace(AppContext())
+    qtbot.addWidget(workspace)
+
+    workspace.set_pa_payload(payload)
+    workspace._worker_succeeded("analysis", envelope)
+    assert "发酵" in workspace._overview.toPlainText()
+    assert "拉升" in workspace._overview.toPlainText()
+
+    # MainWindow repeats this handoff whenever the 二阶博弈 tab is reselected.
+    workspace.set_pa_payload(payload)
+
+    assert "发酵" in workspace._overview.toPlainText()
+    assert "拉升" in workspace._overview.toPlainText()
 
 
 def test_material_news_detail_uses_dark_surface_without_row_selection_highlight(qtbot) -> None:
@@ -1194,6 +1254,34 @@ def test_second_order_data_settings_persist_separately_for_each_symbol(
     reloaded.set_symbol("SH.600519")
     assert reloaded._sector_name_edit.text() == "白酒"
     assert reloaded._sector_code_edit.text() == "SH.BK0003"
+
+
+def test_second_order_trade_rules_save_and_reload(qtbot, tmp_path, monkeypatch) -> None:
+    from pa_agent.app_context import AppContext
+    from pa_agent.config import paths
+    from pa_agent.config.settings import Settings, load_settings
+    from pa_agent.gui.second_order_workspace import SecondOrderWorkspace
+
+    settings_path = tmp_path / "settings.json"
+    monkeypatch.setattr(paths, "SETTINGS_JSON_PATH", settings_path)
+    workspace = SecondOrderWorkspace(AppContext(settings=Settings()))
+    qtbot.addWidget(workspace)
+
+    editor = workspace._tree.findChildren(QPlainTextEdit, "secondOrderTradeRulesInput")[-1]
+    action = workspace._tree.findChildren(QPushButton, "secondOrderTradeRulesAction")[-1]
+    action.click()
+    editor.setPlainText("开盘前不追高；单笔亏损不超过总资金的 1%。")
+    action.click()
+
+    assert load_settings(settings_path).second_order.trade_rules == editor.toPlainText()
+    assert editor.isReadOnly()
+    assert action.text() == "修改"
+
+    reloaded = SecondOrderWorkspace(AppContext(settings=load_settings(settings_path)))
+    qtbot.addWidget(reloaded)
+    restored = reloaded._tree.findChildren(QPlainTextEdit, "secondOrderTradeRulesInput")[-1]
+    assert restored.isReadOnly()
+    assert restored.toPlainText() == "开盘前不追高；单笔亏损不超过总资金的 1%。"
 
 
 def test_second_order_settings_use_terminal_symbol_before_payload_sync(

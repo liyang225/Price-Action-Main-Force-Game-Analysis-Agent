@@ -1000,15 +1000,15 @@ class MainWindow(QMainWindow):
         self._summary_strip.hide()
 
         content_layout.addWidget(workbench, stretch=1)
-        from pa_agent.gui.second_order_workspace import SecondOrderWorkspace
-
-        self._second_order_workspace = SecondOrderWorkspace(self._ctx, tab)
-        self._second_order_workspace.model_settings_requested.connect(
-            self._open_ai_model_settings_dialog
-        )
-        # The second-order action cluster docks right in the selector row; its
-        # selector slot stays empty (no symbol/timeframe selectors).
-        self._action_controls_stack.addWidget(self._second_order_workspace.control_bar())
+        # SecondOrderWorkspace builds a large chart/card tree and starts its
+        # own timers. Do not pay that cost while opening every PA terminal;
+        # keep a lightweight placeholder and materialize it only when the
+        # user enters the second-order module.
+        self._second_order_workspace = None
+        self._second_order_placeholder = QLabel("二阶博弈工作区将在打开模块时加载…")
+        self._second_order_placeholder.setObjectName("secondOrderWorkspacePlaceholder")
+        self._second_order_control_placeholder = QWidget()
+        self._action_controls_stack.addWidget(self._second_order_control_placeholder)
         self._module_controls_stack.addWidget(QWidget())
         from pa_agent.gui.widgets.flow_bar import FlowBar
 
@@ -1018,16 +1018,10 @@ class MainWindow(QMainWindow):
             ("行情", "材料", "推演", "闸门", "归档")
         )
         self._pipeline_stack.addWidget(self._second_order_flow_bar)
-        self._second_order_workspace.pipeline_reset_requested.connect(
-            self._second_order_flow_bar.reset_all
-        )
-        self._second_order_workspace.pipeline_step_changed.connect(
-            self._on_second_order_pipeline_step_changed
-        )
         self._strategy_stack = QStackedLayout()
         self._strategy_stack.setContentsMargins(0, 0, 0, 0)
         self._strategy_stack.addWidget(content_section)
-        self._strategy_stack.addWidget(self._second_order_workspace)
+        self._strategy_stack.addWidget(self._second_order_placeholder)
         outer_layout.addLayout(self._strategy_stack, stretch=1)
 
         # Connect symbol/timeframe combo boxes to the switch handler
@@ -1050,7 +1044,10 @@ class MainWindow(QMainWindow):
             )
         )
 
-        self._refresh_history_ui()
+        # History entries are disk-bound and can involve parsing many JSON
+        # records. Defer the initial population until the terminal has been
+        # inserted and painted, so opening a stock remains responsive.
+        QTimer.singleShot(0, self._refresh_history_ui)
 
         return tab
 
@@ -1104,6 +1101,33 @@ class MainWindow(QMainWindow):
             "stage2_decision": stage2,
         }
 
+    def _ensure_second_order_workspace(self) -> Any:
+        """Construct the heavy second-order page only on first use."""
+        workspace = getattr(self, "_second_order_workspace", None)
+        if workspace is not None:
+            return workspace
+        from pa_agent.gui.second_order_workspace import SecondOrderWorkspace
+
+        workspace = SecondOrderWorkspace(self._ctx, self._second_order_placeholder.parentWidget())
+        workspace.model_settings_requested.connect(self._open_ai_model_settings_dialog)
+        workspace.pipeline_reset_requested.connect(self._second_order_flow_bar.reset_all)
+        workspace.pipeline_step_changed.connect(self._on_second_order_pipeline_step_changed)
+
+        for layout, placeholder in (
+            (self._action_controls_stack, self._second_order_control_placeholder),
+            (self._strategy_stack, self._second_order_placeholder),
+        ):
+            layout.removeWidget(placeholder)
+            placeholder.deleteLater()
+        self._action_controls_stack.addWidget(workspace.control_bar())
+        self._strategy_stack.addWidget(workspace)
+        self._second_order_workspace = workspace
+        if getattr(self, "_strategy_browser", None) is not None and self._strategy_browser.currentIndex() == 1:
+            self._strategy_stack.setCurrentIndex(1)
+            self._module_controls_stack.setCurrentIndex(1)
+            self._action_controls_stack.setCurrentIndex(1)
+        return workspace
+
     def _second_order_settlement_mode(self) -> str:
         symbol = self._symbol_combo.currentText().strip()
         store = getattr(getattr(self, "_history_panel", None), "_trade_rule_store", None)
@@ -1121,19 +1145,21 @@ class MainWindow(QMainWindow):
         *,
         stage1_diagnosis: dict[str, Any] | None = None,
     ) -> None:
-        workspace = getattr(self, "_second_order_workspace", None)
-        if workspace is None:
-            return
         payload = self._second_order_handoff_payload(
             decision,
             stage1_diagnosis=stage1_diagnosis,
         )
-        if (
+        auto_run = (
             payload["settlement_mode"] == "t1"
             and payload["should_trade"]
             and not getattr(self, "_demo_mode", False)
             and not getattr(self, "_history_overlay_active", False)
-        ):
+        )
+        workspace = getattr(self, "_second_order_workspace", None)
+        if workspace is None and not auto_run:
+            return
+        workspace = workspace or self._ensure_second_order_workspace()
+        if auto_run:
             # Switching tabs emits the browser callback, which syncs the last
             # stored record. Apply this just-completed payload afterwards so a
             # stale record can never replace the current stage-2 decision.
@@ -1153,8 +1179,9 @@ class MainWindow(QMainWindow):
         self._action_controls_stack.setCurrentIndex(module_index)
         self._pipeline_stack.setCurrentIndex(module_index)
         if index == 1:
+            workspace = self._ensure_second_order_workspace()
             payload = self._second_order_handoff_payload()
-            self._second_order_workspace.set_pa_payload(payload)
+            workspace.set_pa_payload(payload)
             self._status_bar.showMessage("二阶博弈工作区已加载，并同步当前 PA 分析数据")
 
     def _on_second_order_pipeline_step_changed(self, index: int, status: str) -> None:
@@ -1174,6 +1201,14 @@ class MainWindow(QMainWindow):
         # Reap any zombie workers / loops before starting a fresh one
         self._reap_zombie_workers()
         self._reap_zombie_loops()
+        zombies = getattr(self, "_zombie_loops", ())
+        if any(loop.isRunning() for loop in zombies):
+            # Starting another polling thread while the previous one is still
+            # blocked multiplies socket contention and can make shutdown
+            # effectively impossible. Let the existing loop finish instead.
+            logger.warning("RefreshLoop start deferred: an older loop is still running")
+            self._status_bar.showMessage("正在等待旧行情线程退出…")
+            return
 
         data_source = getattr(self._ctx, "data_source", None)
         if data_source is None:
@@ -3620,8 +3655,20 @@ class MainWindow(QMainWindow):
         bar_count: int,
         *,
         force_incremental: bool = False,
+        _wait_for_refresh: bool = True,
     ) -> None:
         """Fetch K-lines on a worker thread when no RefreshLoop snapshot is cached yet."""
+        # A newly started terminal usually has a RefreshLoop fetching the same
+        # snapshot already. Give that first frame a short, non-blocking window
+        # to populate the cache before starting a second network request.
+        if _wait_for_refresh:
+            loop = getattr(self, "_refresh_loop", None)
+            if loop is not None and loop.isRunning():
+                self._wait_for_refresh_snapshot(
+                    symbol, timeframe, bar_count, force_incremental=force_incremental
+                )
+                return
+
         data_source = getattr(self._ctx, "data_source", None)
         if data_source is None or not getattr(data_source, "_connected", False):
             self._status_bar.showMessage("数据源未连接")
@@ -3674,6 +3721,47 @@ class MainWindow(QMainWindow):
         worker.bars_ready.connect(_on_bars)
         worker.failed.connect(_on_fail)
         worker.start()
+
+    def _wait_for_refresh_snapshot(
+        self,
+        symbol: str,
+        timeframe: str,
+        bar_count: int,
+        *,
+        force_incremental: bool,
+        attempt: int = 0,
+    ) -> None:
+        """Reuse the RefreshLoop's first frame, with a bounded fallback."""
+        bars = self._bars_for_analysis_submit(bar_count)
+        if bars is not None and self._bars_sufficient_for_analysis(bars, bar_count):
+            self._start_analysis_with_bars(
+                symbol,
+                timeframe,
+                bar_count,
+                bars,
+                force_incremental=force_incremental,
+            )
+            return
+        if attempt >= 8:  # ~800 ms; never wait indefinitely on a stuck feed
+            self._start_analysis_async_fetch(
+                symbol,
+                timeframe,
+                bar_count,
+                force_incremental=force_incremental,
+                _wait_for_refresh=False,
+            )
+            return
+        self._status_bar.showMessage("正在等待行情首帧…")
+        QTimer.singleShot(
+            100,
+            lambda: self._wait_for_refresh_snapshot(
+                symbol,
+                timeframe,
+                bar_count,
+                force_incremental=force_incremental,
+                attempt=attempt + 1,
+            ),
+        )
 
     def _start_analysis_with_bars(
         self,
@@ -4095,12 +4183,10 @@ class MainWindow(QMainWindow):
             )
             self._future_trend_panel.set_prediction(inner)
             self._bind_decision_tree(decision, stage1_diag or None)
-            second_order = getattr(self, "_second_order_workspace", None)
-            if second_order is not None:
-                self._sync_second_order_after_stage2(
-                    decision,
-                    stage1_diagnosis=stage1_diag,
-                )
+            self._sync_second_order_after_stage2(
+                decision,
+                stage1_diagnosis=stage1_diag,
+            )
             order = inner.get("order_type", "—")
             self._decision_badge.setText(f"决策: {order}")
             self._managed_order_opportunity = self._has_order_opportunity(inner)

@@ -3,23 +3,18 @@
 from __future__ import annotations
 
 import json
-import os
 import sqlite3
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Mapping
 
 
-_configured_dsa_database = os.environ.get("SECOND_ORDER_DSA_DATABASE", "").strip()
+ROOT = Path(__file__).resolve().parents[2]
+DESKTOP_DSA_DATABASE = Path(r"E:\Daily stock analysis\data\stock_analysis.db")
+PROJECT_DSA_DATABASE = ROOT / "daily_stock_analysis-main" / "data" / "stock_analysis.db"
 DEFAULT_DSA_DATABASE = (
-    Path(_configured_dsa_database).expanduser()
-    if _configured_dsa_database
-    else Path(".dsa-database-not-configured")
+    DESKTOP_DSA_DATABASE if DESKTOP_DSA_DATABASE.is_file() else PROJECT_DSA_DATABASE
 )
-
-# Compatibility aliases for integrations that imported the old constants.
-DESKTOP_DSA_DATABASE = DEFAULT_DSA_DATABASE
-PROJECT_DSA_DATABASE = DEFAULT_DSA_DATABASE
 
 
 def load_latest_dsa_market_context(

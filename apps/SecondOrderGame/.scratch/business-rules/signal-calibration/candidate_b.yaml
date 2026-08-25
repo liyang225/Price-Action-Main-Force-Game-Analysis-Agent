@@ -1,0 +1,8 @@
+# 候选参数 B：不对称羊群（只放宽超买，保护超卖）+ 收窄纳什带 + 放宽陷阱
+herd:
+  rsi_overbought: 65   # 70 → 65，提频 herd_buying（动量延续信号）
+  rsi_oversold: 30     # 保持 30，保护 herd_selling 的超卖反弹预测力
+nash:
+  deviation: 1.5       # 2.0 → 1.5，收窄带宽
+liquidity_trap:
+  psych_proximity: 0.02  # 0.01 → 0.02

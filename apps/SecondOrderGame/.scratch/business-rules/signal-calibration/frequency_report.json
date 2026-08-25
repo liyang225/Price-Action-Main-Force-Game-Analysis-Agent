@@ -1,0 +1,346 @@
+{
+  "start": "2020-01-01",
+  "end": "2026-08-15",
+  "pool_size": 60,
+  "config_version": 2,
+  "summary": {
+    "bars_evaluated": 186269,
+    "insufficient_bars": 4159,
+    "flag_frequency_pct": {
+      "smart_money_positive": 48.682,
+      "herd_volume_spike": 3.623,
+      "herd_buying": 0.194,
+      "herd_selling": 0.069,
+      "institutional_volume": 1.293,
+      "accumulation": 0.899,
+      "distribution": 0.394,
+      "trap_volume_spike": 3.623,
+      "trap_up": 0.196,
+      "trap_down": 0.089,
+      "contrarian_buy": 0.004,
+      "contrarian_sell": 0.007,
+      "momentum_buy": 0.713,
+      "momentum_sell": 1.046,
+      "nash_reversion_buy": 0.098,
+      "nash_reversion_sell": 0.202
+    },
+    "smart_money_ratio_percentiles": {
+      "p5": -16.4627,
+      "p10": -7.6935,
+      "p25": -2.1101,
+      "p50": 0.6593,
+      "p75": 3.7603,
+      "p90": 9.3556,
+      "p95": 17.1791,
+      "min": -29292.0271,
+      "max": 35636.3589
+    },
+    "nash_position_pct": {
+      "above": 6.123,
+      "below": 5.277,
+      "inside": 88.6
+    }
+  },
+  "per_stock": [
+    {
+      "code": "SH.688256",
+      "bars": 2910,
+      "status": "ok"
+    },
+    {
+      "code": "SZ.002371",
+      "bars": 3110,
+      "status": "ok"
+    },
+    {
+      "code": "SH.688012",
+      "bars": 3162,
+      "status": "ok"
+    },
+    {
+      "code": "SH.603986",
+      "bars": 3108,
+      "status": "ok"
+    },
+    {
+      "code": "SH.688981",
+      "bars": 2902,
+      "status": "ok"
+    },
+    {
+      "code": "SH.600519",
+      "bars": 3180,
+      "status": "ok"
+    },
+    {
+      "code": "SZ.000858",
+      "bars": 3169,
+      "status": "ok"
+    },
+    {
+      "code": "SH.600809",
+      "bars": 3159,
+      "status": "ok"
+    },
+    {
+      "code": "SZ.000568",
+      "bars": 3147,
+      "status": "ok"
+    },
+    {
+      "code": "SZ.002304",
+      "bars": 3170,
+      "status": "ok"
+    },
+    {
+      "code": "SH.600036",
+      "bars": 3180,
+      "status": "ok"
+    },
+    {
+      "code": "SH.601166",
+      "bars": 3180,
+      "status": "ok"
+    },
+    {
+      "code": "SH.600000",
+      "bars": 3180,
+      "status": "ok"
+    },
+    {
+      "code": "SH.601998",
+      "bars": 3170,
+      "status": "ok"
+    },
+    {
+      "code": "SZ.000001",
+      "bars": 3170,
+      "status": "ok"
+    },
+    {
+      "code": "SH.600030",
+      "bars": 3145,
+      "status": "ok"
+    },
+    {
+      "code": "SZ.300059",
+      "bars": 3157,
+      "status": "ok"
+    },
+    {
+      "code": "SH.601211",
+      "bars": 3119,
+      "status": "ok"
+    },
+    {
+      "code": "SH.601066",
+      "bars": 3157,
+      "status": "ok"
+    },
+    {
+      "code": "SH.601688",
+      "bars": 3160,
+      "status": "ok"
+    },
+    {
+      "code": "SH.600048",
+      "bars": 3180,
+      "status": "ok"
+    },
+    {
+      "code": "SZ.001979",
+      "bars": 3128,
+      "status": "ok"
+    },
+    {
+      "code": "SH.600895",
+      "bars": 2999,
+      "status": "ok"
+    },
+    {
+      "code": "SH.600663",
+      "bars": 3122,
+      "status": "ok"
+    },
+    {
+      "code": "SZ.000002",
+      "bars": 3150,
+      "status": "ok"
+    },
+    {
+      "code": "SH.600900",
+      "bars": 3158,
+      "status": "ok"
+    },
+    {
+      "code": "SH.600025",
+      "bars": 3148,
+      "status": "ok"
+    },
+    {
+      "code": "SH.601985",
+      "bars": 3170,
+      "status": "ok"
+    },
+    {
+      "code": "SZ.003816",
+      "bars": 3169,
+      "status": "ok"
+    },
+    {
+      "code": "SH.600905",
+      "bars": 2486,
+      "status": "ok"
+    },
+    {
+      "code": "SH.603259",
+      "bars": 3108,
+      "status": "ok"
+    },
+    {
+      "code": "SZ.300015",
+      "bars": 3178,
+      "status": "ok"
+    },
+    {
+      "code": "SZ.300759",
+      "bars": 3180,
+      "status": "ok"
+    },
+    {
+      "code": "SZ.002821",
+      "bars": 3058,
+      "status": "ok"
+    },
+    {
+      "code": "SH.603127",
+      "bars": 2984,
+      "status": "ok"
+    },
+    {
+      "code": "SZ.002594",
+      "bars": 3160,
+      "status": "ok"
+    },
+    {
+      "code": "SH.600104",
+      "bars": 3170,
+      "status": "ok"
+    },
+    {
+      "code": "SH.601633",
+      "bars": 3132,
+      "status": "ok"
+    },
+    {
+      "code": "SH.601127",
+      "bars": 2831,
+      "status": "ok"
+    },
+    {
+      "code": "SZ.000625",
+      "bars": 3103,
+      "status": "ok"
+    },
+    {
+      "code": "SZ.300274",
+      "bars": 3149,
+      "status": "ok"
+    },
+    {
+      "code": "SH.605117",
+      "bars": 2409,
+      "status": "ok"
+    },
+    {
+      "code": "SH.601012",
+      "bars": 3160,
+      "status": "ok"
+    },
+    {
+      "code": "SH.600438",
+      "bars": 3119,
+      "status": "ok"
+    },
+    {
+      "code": "SZ.300316",
+      "bars": 3170,
+      "status": "ok"
+    },
+    {
+      "code": "SH.688111",
+      "bars": 3180,
+      "status": "ok"
+    },
+    {
+      "code": "SZ.300033",
+      "bars": 3157,
+      "status": "ok"
+    },
+    {
+      "code": "SZ.002230",
+      "bars": 3120,
+      "status": "ok"
+    },
+    {
+      "code": "SH.601360",
+      "bars": 3077,
+      "status": "ok"
+    },
+    {
+      "code": "SZ.002920",
+      "bars": 3100,
+      "status": "ok"
+    },
+    {
+      "code": "SH.601088",
+      "bars": 3160,
+      "status": "ok"
+    },
+    {
+      "code": "SH.601225",
+      "bars": 3180,
+      "status": "ok"
+    },
+    {
+      "code": "SH.601898",
+      "bars": 3140,
+      "status": "ok"
+    },
+    {
+      "code": "SH.600188",
+      "bars": 3119,
+      "status": "ok"
+    },
+    {
+      "code": "SZ.002128",
+      "bars": 3130,
+      "status": "ok"
+    },
+    {
+      "code": "SZ.000895",
+      "bars": 3180,
+      "status": "ok"
+    },
+    {
+      "code": "SH.603345",
+      "bars": 3117,
+      "status": "ok"
+    },
+    {
+      "code": "SZ.300146",
+      "bars": 3170,
+      "status": "ok"
+    },
+    {
+      "code": "SZ.002626",
+      "bars": 3073,
+      "status": "ok"
+    },
+    {
+      "code": "SZ.002216",
+      "bars": 3110,
+      "status": "ok"
+    }
+  ]
+}

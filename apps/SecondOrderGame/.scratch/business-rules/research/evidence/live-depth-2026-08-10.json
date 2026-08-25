@@ -1,0 +1,84 @@
+{
+  "entries": [
+    {
+      "code": "SH.600000",
+      "earliest": "2006-07-27",
+      "elapsed_seconds": 5.148,
+      "error": null,
+      "first_available_time": "2006-07-27",
+      "interface_error": null,
+      "kind": "stock",
+      "ktype": "day",
+      "last_available_time": "2026-08-10",
+      "latest": "2026-08-10",
+      "page_count": 5,
+      "period": "day",
+      "requested_range": {
+        "end": "2026-08-10",
+        "start": "2000-01-01"
+      },
+      "row_count": 4815,
+      "trading_day_count": 4815
+    },
+    {
+      "code": "SH.600000",
+      "earliest": "2019-02-21",
+      "elapsed_seconds": 3.88,
+      "error": null,
+      "first_available_time": "2019-02-21",
+      "interface_error": null,
+      "kind": "stock",
+      "ktype": "120m",
+      "last_available_time": "2026-08-10",
+      "latest": "2026-08-10",
+      "page_count": 4,
+      "period": "120m",
+      "requested_range": {
+        "end": "2026-08-10",
+        "start": "2000-01-01"
+      },
+      "row_count": 3625,
+      "trading_day_count": 1813
+    },
+    {
+      "code": "SH.LIST0002",
+      "earliest": "2020-01-02",
+      "elapsed_seconds": 1.225,
+      "error": null,
+      "first_available_time": "2020-01-02",
+      "interface_error": null,
+      "kind": "sector_index",
+      "ktype": "day",
+      "last_available_time": "2026-08-10",
+      "latest": "2026-08-10",
+      "page_count": 2,
+      "period": "day",
+      "requested_range": {
+        "end": "2026-08-10",
+        "start": "2000-01-01"
+      },
+      "row_count": 1600,
+      "trading_day_count": 1600
+    },
+    {
+      "code": "SH.LIST0002",
+      "earliest": "2021-11-24",
+      "elapsed_seconds": 2.474,
+      "error": null,
+      "first_available_time": "2021-11-24",
+      "interface_error": null,
+      "kind": "sector_index",
+      "ktype": "120m",
+      "last_available_time": "2026-08-10",
+      "latest": "2026-08-10",
+      "page_count": 3,
+      "period": "120m",
+      "requested_range": {
+        "end": "2026-08-10",
+        "start": "2000-01-01"
+      },
+      "row_count": 2283,
+      "trading_day_count": 1142
+    }
+  ]
+}

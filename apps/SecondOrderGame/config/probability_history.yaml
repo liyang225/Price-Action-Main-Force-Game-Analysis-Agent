@@ -1,0 +1,16 @@
+# Immutable resolution contracts for probability versions no longer active.
+# These bounds are used only to score already-persisted forecasts; they never
+# enter live probability estimation.
+versions:
+  1:
+    opening_distribution:
+      ranges:
+        - outcome: gap_down
+          lower_bound: null
+          upper_bound: -0.01
+        - outcome: near_reference
+          lower_bound: -0.01
+          upper_bound: 0.01
+        - outcome: gap_up
+          lower_bound: 0.01
+          upper_bound: null

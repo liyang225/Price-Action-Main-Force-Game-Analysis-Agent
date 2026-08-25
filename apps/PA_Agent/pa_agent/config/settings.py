@@ -186,6 +186,7 @@ class SecondOrderSettings(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     tavily_api_key: str = ""
+    trade_rules: str = ""
     market_data_source: Literal["futu", "akshare"] = "futu"
     sector_name: str = ""
     sector_code: str = ""

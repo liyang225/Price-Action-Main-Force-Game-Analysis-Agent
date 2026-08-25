@@ -1,0 +1,9 @@
+# 候选参数 A：放宽羊群 + 收窄纳什带 + 放宽流动性陷阱
+# 目标：提频强信号（herd_selling 超卖反弹），激活动量/回归，微提陷阱敏感度
+herd:
+  rsi_overbought: 65   # 70 → 65
+  rsi_oversold: 35     # 30 → 35
+nash:
+  deviation: 1.5       # 2.0 → 1.5，收窄带宽
+liquidity_trap:
+  psych_proximity: 0.02  # 0.01 → 0.02，放宽心理位接近度

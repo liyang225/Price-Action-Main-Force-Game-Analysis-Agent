@@ -47,6 +47,13 @@ def chart_widget(qtbot):
 
 
 class TestChartFitView:
+    def test_technical_analysis_candles_use_the_requested_taller_scale(self):
+        from pa_agent.gui.chart_widget import _CANDLE_VERTICAL_SCALE
+        from pa_agent.gui.second_order_chart import SecondOrderGameChart
+
+        assert _CANDLE_VERTICAL_SCALE == pytest.approx(0.75)
+        assert SecondOrderGameChart._candle_vertical_scale == pytest.approx(0.50)
+
     def test_view_ranges_show_newest_twenty_eight_when_many_bars(self, chart_widget):
         from pa_agent.gui.chart_widget import _FIT_VISIBLE_BARS
 

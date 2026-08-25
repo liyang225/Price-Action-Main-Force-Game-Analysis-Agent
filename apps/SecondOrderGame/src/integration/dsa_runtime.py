@@ -15,17 +15,13 @@ from src.integration.dsa_market_context import (
 )
 
 
-_configured_dsa_install_root = os.environ.get("DSA_INSTALL_ROOT", "").strip()
-DEFAULT_DSA_INSTALL_ROOT = (
-    Path(_configured_dsa_install_root).expanduser()
-    if _configured_dsa_install_root
-    else Path(".dsa-install-not-configured")
-)
+DEFAULT_DSA_INSTALL_ROOT = Path(r"E:\Daily stock analysis")
 DEFAULT_DSA_EXECUTABLE = (
-    Path(os.environ["DSA_EXECUTABLE"]).expanduser()
-    if os.environ.get("DSA_EXECUTABLE", "").strip()
-    else DEFAULT_DSA_INSTALL_ROOT
-    / "resources" / "backend" / "stock_analysis" / "stock_analysis.exe"
+    DEFAULT_DSA_INSTALL_ROOT
+    / "resources"
+    / "backend"
+    / "stock_analysis"
+    / "stock_analysis.exe"
 )
 
 

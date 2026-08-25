@@ -106,6 +106,39 @@ def test_embedded_service_wires_sink_into_orchestrator(tmp_path) -> None:
     assert captured == [("BK0475", "2026-08-10", "发酵")]
 
 
+def test_embedded_service_builds_default_production_sink(tmp_path) -> None:
+    class Builder:
+        def __init__(self, source):
+            self.source = source
+
+        def build(self, pa):
+            return type("Context", (), {"materials": {}})()
+
+    database = tmp_path / "confusion.db"
+    service = PAEmbeddedService(
+        market_source=object(),
+        model_client=object(),
+        context_builder_factory=Builder,
+        orchestrator_factory=lambda client, **kwargs: _orchestrator_with_sink(
+            kwargs.get("llm_observation_sink")
+        ),
+        confusion_database=database,
+        history_database=tmp_path / "history.db",
+        labeler_catchup=False,
+        capital_flow_catchup=False,
+    )
+
+    assert service.run_analysis({"symbol": "000001.SZ"})["ok"] is True
+    with ConfusionCountStore(database) as store:
+        assert store.unreconciled_observations() == (
+            {
+                "sector_code": "BK0475",
+                "trading_date": "2026-08-10",
+                "llm_label": "发酵",
+            },
+        )
+
+
 def test_sink_records_into_confusion_store(tmp_path) -> None:
     from src.labeler.confusion_counts import build_llm_observation_sink
 

@@ -18,7 +18,7 @@
 本文档中 PROJECT_ROOT 代表 PA_Agent 项目的根目录。
 执行前必须先确定项目实际路径，后续所有命令中的 PROJECT_ROOT 都替换为实际路径。
 例如：用户项目在 ~/Desktop/PA_Agent，则 PROJECT_ROOT = ~/Desktop/PA_Agent
-      将 PROJECT_ROOT 设为当前 PA_Agent 项目根目录
+      用户项目在 /Users/张三/Projects/PA_Agent，则 PROJECT_ROOT = /Users/张三/Projects/PA_Agent
 
 确定方法：找到项目中存在 pa_agent/main.py 和 pyproject.toml 的那个目录，就是 PROJECT_ROOT。
 

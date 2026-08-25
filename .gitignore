@@ -50,6 +50,18 @@ venv/
 *.patch
 *.raw
 
+# SecondOrderGame keeps issue tracking, validation tools, and research
+# fixtures in .scratch; several tests import those versioned tools directly.
+!apps/SecondOrderGame/.scratch/
+!apps/SecondOrderGame/.scratch/**
+apps/SecondOrderGame/.scratch/**/*.raw
+apps/SecondOrderGame/.scratch/**/*.patch
+apps/SecondOrderGame/.scratch/**/cache/
+apps/SecondOrderGame/.scratch/**/*.pkl
+apps/SecondOrderGame/.scratch/.archive-*/
+apps/SecondOrderGame/.scratch/ui-landing-preview/
+apps/SecondOrderGame/.scratch/pa_second_order_*.png
+
 # OS files
 .DS_Store
 Thumbs.db

@@ -56,7 +56,7 @@
 - **交易环境**：板块轮动节奏、风格偏好、资金抱团方向。
 - **情绪广度**：对所有在册板块情绪的横向聚合（处于高潮的板块占比、情绪中位数）。这是派生指标，不是重新计算的市场级情绪。
 
-市场层数据复用 DSA 的大盘分析记录，数据库路径由 PA Agent 设置项 `dsa_database_path` 或环境变量 `SECOND_ORDER_DSA_DATABASE` 提供，不依赖本机固定目录。
+市场层数据直接复用 DSA: C:\Users\bai\Documents\我的文档\股票\新项目\SecondOrderGame\daily_stock_analysis-main 的大盘分析模块，提取结构化大盘数据 + 盘面 + 指数 + 板块。
 
 ### 2.2 板块层
 

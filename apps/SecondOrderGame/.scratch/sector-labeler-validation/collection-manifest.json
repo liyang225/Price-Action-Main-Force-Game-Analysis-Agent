@@ -1,0 +1,11 @@
+{
+  "schema_version": "1",
+  "source": "Futu live research collection reused from .scratch/business-rules/experiments/output/daily_ohlcv_manifest.json",
+  "source_generated_at": "2026-08-10T11:24:41.221119+08:00",
+  "source_sha256": "3c6409cd4e5adca9c5bad5bcb8eceda2a6496aa6eee8933072e4e85cd14bc54e",
+  "source_successful_targets": 73,
+  "source_failed_targets": 0,
+  "validated_sector_count": 12,
+  "row_count": 19200,
+  "sector_ohlcv_sha256": "8d7ed9d65bfdba8c6b768c6d967103dded35f6eaab71047f251adb7105f40f65"
+}

@@ -13,7 +13,7 @@ unchanged; only the rendering layer is replaced.
 from __future__ import annotations
 
 import re
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
@@ -22,6 +22,8 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QPlainTextEdit,
+    QPushButton,
     QTableWidget,
     QTableWidgetItem,
     QToolButton,
@@ -53,7 +55,6 @@ _SEG_IDLE = "#53606F"
 
 _FONT_UI = '"Microsoft YaHei UI", "Segoe UI", sans-serif'
 _FONT_NUM = '"Cascadia Mono", "Consolas", monospace'
-_FONT_HEITI = '"SimHei", "Microsoft YaHei UI", "Segoe UI", sans-serif'
 
 
 def _num(value: object, digits: int = 1) -> str:
@@ -213,6 +214,22 @@ class _TwoColumnGrid(QWidget):
             self._column = 0
 
 
+class _FourColumnGrid(QWidget):
+    """One dense row for the four linked participant-inference facts."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.layout_ = QGridLayout(self)
+        self.layout_.setContentsMargins(0, 0, 0, 0)
+        self.layout_.setHorizontalSpacing(10)
+        self.layout_.setVerticalSpacing(10)
+        for column in range(4):
+            self.layout_.setColumnStretch(column, 1)
+
+    def add(self, widget: QWidget, column: int) -> None:
+        self.layout_.addWidget(widget, 0, column)
+
+
 class _Card(QFrame):
     """Base card with a title row and a content area."""
 
@@ -334,7 +351,7 @@ class _SummaryBand(QFrame):
         score_box = QVBoxLayout(score)
         score_box.setContentsMargins(14, 12, 14, 12)
         score_box.setSpacing(6)
-        big = QLabel(_strip_number(value))
+        big = QLabel(_num(value, 2) if label == "情绪指数" else _strip_number(value))
         big.setAlignment(Qt.AlignmentFlag.AlignCenter)
         big.setStyleSheet(
             f"background: transparent; border: none; color: {_TEXT}; "
@@ -702,15 +719,20 @@ class _ScenarioCards(QWidget):
             root.addLayout(grid)
 
     @staticmethod
-    def _opening_probability(branch: Mapping[str, Any]) -> str:
-        return str(branch.get("该情景明天开盘概率") or branch.get("概率") or "—")
+    def _period_probability(branch: Mapping[str, Any]) -> str:
+        return str(
+            branch.get("下一完整时段概率")
+            or branch.get("该情景明天开盘概率")
+            or branch.get("概率")
+            or "—"
+        )
 
     @staticmethod
     def _split_main(branches: list[Mapping[str, Any]]) -> tuple[Mapping[str, Any], list[Mapping[str, Any]]]:
         def prob_of(branch: Mapping[str, Any]) -> float:
             import re
 
-            match = re.search(r"-?\d+(?:\.\d+)?", _ScenarioCards._opening_probability(branch))
+            match = re.search(r"-?\d+(?:\.\d+)?", _ScenarioCards._period_probability(branch))
             return float(match.group(0)) if match else -1.0
 
         ordered = sorted(branches, key=prob_of, reverse=True)
@@ -736,13 +758,13 @@ class _ScenarioCards(QWidget):
         prob_box = QVBoxLayout(prob_host)
         prob_box.setContentsMargins(10, 12, 10, 12)
         prob_box.setSpacing(5)
-        big = QLabel(self._opening_probability(branch))
+        big = QLabel(self._period_probability(branch))
         big.setAlignment(Qt.AlignmentFlag.AlignCenter)
         big.setStyleSheet(
             f"background: transparent; border: none; color: {_TEXT}; "
             f"font-family: {_FONT_NUM}; font-size: 27px; font-weight: 650;"
         )
-        caption = QLabel("符合预期概率")
+        caption = QLabel("下一时段概率")
         caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
         caption.setStyleSheet(
             f"background: transparent; border: none; color: {_TEXT_2}; font-size: 13px;"
@@ -786,7 +808,7 @@ class _ScenarioCards(QWidget):
         root = QVBoxLayout(card)
         root.setContentsMargins(12, 10, 12, 11)
         root.setSpacing(5)
-        prob = QLabel(self._opening_probability(branch))
+        prob = QLabel(self._period_probability(branch))
         prob.setStyleSheet(
             f"background: transparent; border: none; color: {_TEXT}; "
             f"font-family: {_FONT_NUM}; font-size: 23px; font-weight: 650;"
@@ -812,6 +834,79 @@ class _ScenarioCards(QWidget):
         )
         root.addWidget(meta)
         return card
+
+
+class _TradeRulesEditor(QWidget):
+    """Read-only trade rules with an explicit edit/save transition."""
+
+    def __init__(
+        self,
+        text: str,
+        save_callback: Callable[[str], bool] | None,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._save_callback = save_callback
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 12, 0, 0)
+        root.setSpacing(8)
+
+        header = QHBoxLayout()
+        header.setContentsMargins(0, 0, 0, 0)
+        header.setSpacing(8)
+        title = QLabel("我的交易规则")
+        title.setObjectName("secondOrderTradeRulesTitle")
+        title.setStyleSheet(
+            f"background: transparent; border: none; color: {_TEXT}; "
+            "font-size: 17px; font-weight: 600;"
+        )
+        header.addWidget(title)
+        header.addStretch(1)
+
+        self._action = QPushButton("修改")
+        self._action.setObjectName("secondOrderTradeRulesAction")
+        self._action.setStyleSheet(
+            f"QPushButton#secondOrderTradeRulesAction {{ background: {_PANEL_SOFT}; "
+            f"border: 1px solid {_LINE_STRONG}; border-radius: 4px; color: {_ACCENT}; "
+            "padding: 3px 10px; font-size: 13px; } "
+            f"QPushButton#secondOrderTradeRulesAction:hover {{ border-color: {_ACCENT}; color: {_TEXT}; }}"
+        )
+        self._action.clicked.connect(self._toggle_editing)
+        header.addWidget(self._action)
+        root.addLayout(header)
+
+        editor_box = QFrame()
+        editor_box.setObjectName("secondOrderTradeRulesBox")
+        editor_box.setStyleSheet(
+            f"QFrame#secondOrderTradeRulesBox {{ background: {_PANEL_RAISED}; "
+            f"border: 1px solid {_LINE_STRONG}; border-radius: 4px; }}"
+        )
+        box = QVBoxLayout(editor_box)
+        box.setContentsMargins(10, 8, 10, 10)
+        box.setSpacing(6)
+        self._input = QPlainTextEdit(text)
+        self._input.setObjectName("secondOrderTradeRulesInput")
+        self._input.setReadOnly(True)
+        self._input.setPlaceholderText("记录你在交易中必须遵守的规则")
+        self._input.setMinimumHeight(150)
+        self._input.setStyleSheet(
+            f"QPlainTextEdit#secondOrderTradeRulesInput {{ background: transparent; border: none; "
+            f"color: {_TEXT}; font-family: {_FONT_UI}; font-size: 14px; line-height: 1.55; }} "
+            f"QPlainTextEdit#secondOrderTradeRulesInput:focus {{ border: 1px solid {_ACCENT}; border-radius: 3px; }}"
+        )
+        box.addWidget(self._input)
+        root.addWidget(editor_box)
+
+    def _toggle_editing(self) -> None:
+        if self._input.isReadOnly():
+            self._input.setReadOnly(False)
+            self._action.setText("保存")
+            self._input.setFocus()
+            return
+        if self._save_callback is not None and not self._save_callback(self._input.toPlainText()):
+            return
+        self._input.setReadOnly(True)
+        self._action.setText("修改")
 
 
 class _FormulaBlock(QFrame):
@@ -1181,7 +1276,21 @@ class PrototypeAnalysisPanel(_AnalysisResultPanel):
         parent: QWidget | None = None,
     ) -> None:
         self._page = page
+        self._trade_rules_text = ""
+        self._trade_rules_save_callback: Callable[[str], bool] | None = None
+        self._tree_summary: Mapping[str, Any] | None = None
         super().__init__(initial_text, parent)
+
+    def set_trade_rules(
+        self,
+        text: str,
+        save_callback: Callable[[str], bool] | None,
+    ) -> None:
+        """Set the globally persisted rules shown below the three scenarios."""
+        self._trade_rules_text = str(text or "")
+        self._trade_rules_save_callback = save_callback
+        if self._page == "tree":
+            self._render_tree_page(self._tree_summary or self._empty_payload("tree"))
 
     # -- initial / waiting state ------------------------------------------
     def _render_cards(self, fields: Mapping[str, object]) -> None:
@@ -1261,6 +1370,24 @@ class PrototypeAnalysisPanel(_AnalysisResultPanel):
                         "高位减仓": None,
                     },
                 },
+                "参与者后验": {
+                    "主力": {
+                        "建仓": None,
+                        "震仓": None,
+                        "拉升": None,
+                        "出货": None,
+                        "观望": None,
+                        "狩猎止损": None,
+                    },
+                    "散户": {
+                        "FOMO追高": None,
+                        "恐慌割肉": None,
+                        "观望": None,
+                        "理性跟随": None,
+                        "底部建仓": None,
+                        "高位减仓": None,
+                    },
+                },
                 "主导参与者行为推演": {},
             }
         if page == "tree":
@@ -1268,21 +1395,21 @@ class PrototypeAnalysisPanel(_AnalysisResultPanel):
                 "B/C三情景概率": [
                     {
                         "情景": "符合预期",
-                        "该情景明天开盘概率": "—",
+                        "下一完整时段概率": "—",
                         "开盘首次下跌达止损概率": "—",
                         "状态": "等待推演",
                         "应对": "等待推演完成后生成应对策略",
                     },
                     {
                         "情景": "超预期强",
-                        "该情景明天开盘概率": "—",
+                        "下一完整时段概率": "—",
                         "开盘首次下跌达止损概率": "—",
                         "状态": "等待推演",
                         "应对": "等待推演完成后生成应对策略",
                     },
                     {
                         "情景": "低于预期",
-                        "该情景明天开盘概率": "—",
+                        "下一完整时段概率": "—",
                         "开盘首次下跌达止损概率": "—",
                         "状态": "等待推演",
                         "应对": "等待推演完成后生成应对策略",
@@ -1409,7 +1536,7 @@ class PrototypeAnalysisPanel(_AnalysisResultPanel):
         effective_cycle = (
             max(belief_map, key=belief_map.get) if belief_map else "等待 HMM 更新"
         )
-        state_card = _Card("状态快照", font_family=_FONT_HEITI)
+        state_card = _Card("状态快照")
         state_card.body.addWidget(
             _FactGrid(
                 [
@@ -1421,7 +1548,7 @@ class PrototypeAnalysisPanel(_AnalysisResultPanel):
                     ("共识方向", observation_map.get("consensus_direction") or "未确认"),
                 ],
                 columns=2,
-                font_family=_FONT_HEITI,
+                font_family=_FONT_UI,
             )
         )
         grid.add(state_card)
@@ -1537,41 +1664,63 @@ class PrototypeAnalysisPanel(_AnalysisResultPanel):
                 grid.add(contra_card)
 
         if forecast is None or isinstance(forecast, Mapping):
-            card = _Card("主导参与者行为推演")
-            card.setStyleSheet(
-                "QFrame#protoCard { background: #171D26; border: 1px solid #3F5A7E; border-radius: 4px; }"
-            )
-            flat: list[tuple[str, object]] = []
             forecast_map = forecast if isinstance(forecast, Mapping) else {}
-            for participant, item in forecast_map.items():
-                if not isinstance(item, Mapping):
-                    continue
-                behavior = item.get("model_behavior")
-                probabilities = item.get("probabilities")
-                prior_weight = item.get("prior_weight")
-                if behavior:
-                    flat.append(("参与者", participant))
-                    flat.append(("推演行为", behavior))
-                    if isinstance(probabilities, Mapping) and probabilities:
-                        best = max(probabilities.items(), key=lambda kv: kv[1] if isinstance(kv[1], (int, float)) else -1)
-                        flat.append(("行为概率", _pct(best[1]) if isinstance(best[1], (int, float)) else str(best[1])))
-                    if prior_weight is not None:
-                        flat.append(("先验权重", prior_weight))
-            if flat:
-                card.body.addWidget(_FactGrid(flat, columns=2))
-            else:
-                card.body.addWidget(_TextCard("", "等待推演完成后给出主导参与者行为推演"))
-            card.body.addWidget(
-                _TextCard(
-                    "",
-                    "专家先验推演，非统计估计。当前缺少可区分主力意图的高成本信号时，概率仅反映先验结构。",
-                )
+            selected_participant = (
+                participant_analysis.get("participant")
+                if isinstance(participant_analysis, Mapping)
+                else None
             )
-            grid.add(card, span=2)
+            selected_item = forecast_map.get(selected_participant)
+            if not isinstance(selected_item, Mapping) and forecast_map:
+                selected_participant, selected_item = next(iter(forecast_map.items()))
+            selected_item = selected_item if isinstance(selected_item, Mapping) else {}
+            behavior = selected_item.get("model_behavior")
+            probabilities = selected_item.get("probabilities")
+            best_probability: object = "等待推演"
+            if isinstance(probabilities, Mapping) and probabilities:
+                _best_behavior, best_value = max(
+                    probabilities.items(),
+                    key=lambda item: item[1] if isinstance(item[1], (int, float)) else -1,
+                )
+                best_probability = _pct(best_value) if isinstance(best_value, (int, float)) else str(best_value)
+            prior_weight = selected_item.get("prior_weight")
+            prior_display: object = (
+                _pct(prior_weight)
+                if isinstance(prior_weight, (int, float))
+                else "等待推演"
+            )
+
+            forecast_section = QWidget()
+            forecast_layout = QVBoxLayout(forecast_section)
+            forecast_layout.setContentsMargins(0, 0, 0, 0)
+            forecast_layout.setSpacing(8)
+            section_title = QLabel("主导参与者行为推演")
+            section_title.setObjectName("secondOrderFieldName")
+            section_title.setStyleSheet(
+                f"background: transparent; border: none; color: {_TEXT}; "
+                "font-size: 16px; font-weight: 600;"
+            )
+            forecast_layout.addWidget(section_title)
+            forecast_grid = _FourColumnGrid()
+            forecast_cards = (
+                ("参与者", selected_participant or "等待识别"),
+                ("该参与者下一步博弈行为推演", behavior or "等待推演"),
+                ("行为概率", best_probability),
+                ("先验权重", prior_display),
+            )
+            for column, (title, value) in enumerate(forecast_cards):
+                card = _Card(title)
+                card.setStyleSheet(
+                    "QFrame#protoCard { background: #171D26; border: 1px solid #3F5A7E; border-radius: 4px; }"
+                )
+                card.body.addWidget(_styled_text(str(value)))
+                forecast_grid.add(card, column)
+            forecast_layout.addWidget(forecast_grid)
+            grid.add(forecast_section, span=2)
 
         if isinstance(priors, Mapping) and priors:
-            card = _Card("HMM 行为先验")
-            note = QLabel("政策环境修正后的分布。主力与散户始终并列显示。")
+            card = _Card("当下参与者行为推断（HMM行为先验）")
+            note = QLabel("周期观测前、经政策环境修正的分布。主力与散户始终并列显示。")
             note.setStyleSheet(f"color: {_TEXT_3}; font-size: 13px;")
             card.body.addWidget(note)
             card.body.addWidget(_BehaviorBars(priors))
@@ -1581,20 +1730,27 @@ class PrototypeAnalysisPanel(_AnalysisResultPanel):
     # -- tree page ---------------------------------------------------------
     def _render_tree_page(self, summary: Mapping[str, Any]) -> None:
         self._clear_cards()
+        self._tree_summary = dict(summary)
+        self._append(
+            _TradeRulesEditor(
+                self._trade_rules_text,
+                self._trade_rules_save_callback,
+            )
+        )
         branches = summary.get("B/C三情景概率")
         if not isinstance(branches, list | tuple) or not branches:
             self._append(self._waiting_block("暂无情景分支"))
-            return
-        self._append(_ScenarioCards([item for item in branches if isinstance(item, Mapping)]))
+        else:
+            self._append(_ScenarioCards([item for item in branches if isinstance(item, Mapping)]))
 
     # -- sector page -------------------------------------------------------
     def _render_sector_page(self, rows: list[list[tuple[str, object, int]]]) -> None:
         self._clear_cards()
+        self._sector_grid = None
         structure = self._group(rows, "板块结构")
         policy_env = self._group(rows, "政策环境")
         policy_detection = self._group(rows, "政策检测")
         structure_map = structure if isinstance(structure, Mapping) else {}
-        grid = _TwoColumnGrid()
         state_card = _Card("板块状态")
         state_facts = []
         for key, label in (
@@ -1616,35 +1772,7 @@ class PrototypeAnalysisPanel(_AnalysisResultPanel):
             if state_facts
             else _styled_text("等待板块状态数据", muted=True)
         )
-        grid.add(state_card, span=2)
-
-        if policy_env not in (None, "") or isinstance(policy_detection, Mapping):
-            card = _Card("政策环境", font_family=_FONT_HEITI)
-            card.setStyleSheet(
-                f"QFrame#protoCard {{ background: {_PANEL_RAISED}; border: 1px solid #3F5A7E; "
-                f"border-radius: 4px; font-family: {_FONT_HEITI}; }}"
-            )
-            facts = [("当前判断", policy_env or "等待二阶推演识别")]
-            detection_map = policy_detection if isinstance(policy_detection, Mapping) else {}
-            for key, label in (
-                ("检测环境", "检测环境"),
-                ("状态", "检测状态"),
-            ):
-                if detection_map.get(key) not in (None, ""):
-                    facts.append((label, detection_map[key]))
-            card.body.addWidget(
-                _FactGrid(facts, columns=2, font_family=_FONT_HEITI)
-            )
-            evidence = detection_map.get("证据链")
-            if isinstance(evidence, list | tuple) and evidence:
-                items = [
-                    f"{entry.get('渠道') or '渠道'}：{entry.get('摘要') or entry}"
-                    for entry in evidence
-                    if isinstance(entry, Mapping)
-                ]
-                if items:
-                    card.body.addWidget(_InsightList(items))
-            grid.add(card, span=2)
+        static_cards: list[tuple[QWidget, int]] = [(state_card, 2)]
 
         conclusion_keys = (
             "structure_conclusion",
@@ -1667,9 +1795,52 @@ class PrototypeAnalysisPanel(_AnalysisResultPanel):
             if conclusions
             else _styled_text("暂无独立结构结论", muted=True)
         )
-        grid.add(conclusion_card, span=2)
+        static_cards.append((conclusion_card, 2))
+
+        if policy_env not in (None, "") or isinstance(policy_detection, Mapping):
+            card = _Card("政策环境")
+            card.setStyleSheet(
+                f"QFrame#protoCard {{ background: {_PANEL_RAISED}; border: 1px solid #3F5A7E; "
+                "border-radius: 4px; }"
+            )
+            facts = [("当前判断", policy_env or "等待二阶推演识别")]
+            detection_map = policy_detection if isinstance(policy_detection, Mapping) else {}
+            for key, label in (
+                ("检测环境", "检测环境"),
+                ("状态", "检测状态"),
+            ):
+                if detection_map.get(key) not in (None, ""):
+                    facts.append((label, detection_map[key]))
+            card.body.addWidget(
+                _FactGrid(facts, columns=2, font_family=_FONT_UI)
+            )
+            evidence = detection_map.get("证据链")
+            if isinstance(evidence, list | tuple) and evidence:
+                items = [
+                    f"{entry.get('渠道') or '渠道'}：{entry.get('摘要') or entry}"
+                    for entry in evidence
+                    if isinstance(entry, Mapping)
+                ]
+                if items:
+                    card.body.addWidget(_InsightList(items))
+            static_cards.append((card, 2))
+        self._sector_static_cards = static_cards
+        self._sector_table_cards: list[tuple[QWidget, int]] = []
+        self._rebuild_sector_grid()
+
+    def _rebuild_sector_grid(self) -> None:
+        grid = _TwoColumnGrid()
+        for widget, span in self._sector_table_cards + self._sector_static_cards:
+            grid.add(widget, span=span)
+
+        previous = getattr(self, "_sector_grid", None)
+        if previous is None:
+            self._append(grid)
+        else:
+            self._cards_layout.replaceWidget(previous, grid)
+            previous.setParent(None)
+            previous.deleteLater()
         self._sector_grid = grid
-        self._append(grid)
 
     # -- market page -------------------------------------------------------
     def _render_market_page(self, rows: list[list[tuple[str, object, int]]]) -> None:
@@ -1807,12 +1978,14 @@ class PrototypeAnalysisPanel(_AnalysisResultPanel):
         if self._page != "sector" or not hasattr(self, "_sector_grid"):
             super().set_table_sections(sections)
             return
+        self._sector_table_cards = []
         for section in sections:
             if not isinstance(section, Mapping):
                 continue
             title = str(section.get("title") or "")
             span = 2 if title == "资金流向" else 1
-            self._sector_grid.add(self._build_table_section(section), span=span)
+            self._sector_table_cards.append((self._build_table_section(section), span))
+        self._rebuild_sector_grid()
 
     # -- table sections (sector page) --------------------------------------
     def _build_table_section(self, section: Mapping[str, Any]) -> QWidget:

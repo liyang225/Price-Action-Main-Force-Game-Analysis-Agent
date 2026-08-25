@@ -25,7 +25,12 @@ def _default_history_database() -> Path:
 
 
 class AnalysisHistoryStore:
-    def __init__(self, database: Path | str | None = None) -> None:
+    def __init__(
+        self,
+        database: Path | str | None = None,
+        *,
+        calibration_minimum_sample_count: int = 30,
+    ) -> None:
         path = Path(database if database is not None else _default_history_database())
         path.parent.mkdir(parents=True, exist_ok=True)
         self._connection = sqlite3.connect(path)
@@ -59,6 +64,42 @@ class AnalysisHistoryStore:
                 "ALTER TABLE second_order_history ADD COLUMN resolved_at TEXT"
             )
         self._connection.commit()
+        from src.calibration.history import HistoryCalibrationStore
+
+        self._calibration = HistoryCalibrationStore(
+            self._connection,
+            minimum_sample_count=calibration_minimum_sample_count,
+        )
+        self._backfill_calibration_predictions()
+
+    def __enter__(self) -> "AnalysisHistoryStore":
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        self.close()
+
+    def _backfill_calibration_predictions(self) -> None:
+        """Capture compatible probability snapshots from pre-bridge history."""
+        rows = self._connection.execute(
+            """
+            SELECT h.id, h.payload_json
+            FROM second_order_history AS h
+            WHERE NOT EXISTS (
+                SELECT 1 FROM history_calibration_links AS l
+                WHERE l.history_id = h.id
+            )
+            ORDER BY h.id
+            """
+        ).fetchall()
+        for row in rows:
+            try:
+                payload = json.loads(str(row["payload_json"]))
+                if isinstance(payload, Mapping):
+                    self._calibration.record(int(row["id"]), payload)
+            except (json.JSONDecodeError, TypeError, ValueError):
+                # A malformed or differently-versioned legacy record remains
+                # viewable history, but must never become a fabricated score.
+                continue
 
     def append(self, payload: Mapping[str, Any]) -> int:
         input_ = payload.get("input") if isinstance(payload, Mapping) else None
@@ -88,7 +129,9 @@ class AnalysisHistoryStore:
             ),
         )
         self._connection.commit()
-        return int(cursor.lastrowid)
+        history_id = int(cursor.lastrowid)
+        self._calibration.record(history_id, payload)
+        return history_id
 
     def list_recent(self, *, symbol: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
         if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 500:
@@ -149,6 +192,7 @@ class AnalysisHistoryStore:
         """Delete one history record by id. Returns True when a row was removed."""
         if isinstance(record_id, bool) or not isinstance(record_id, int) or record_id < 1:
             raise ValueError("record_id must be a positive integer")
+        self._calibration.delete_history(record_id)
         cursor = self._connection.execute(
             "DELETE FROM second_order_history WHERE id = ?", (record_id,)
         )
@@ -179,7 +223,14 @@ class AnalysisHistoryStore:
             "win_rate": (
                 int(row["wins"] or 0) / resolved if resolved >= 30 else None
             ),
+            "calibration": self._calibration.summary(symbol=symbol),
         }
+
+    def calibration_summary(self, *, symbol: str | None = None) -> dict[str, Any]:
+        return self._calibration.summary(symbol=symbol)
+
+    def reconcile_calibration(self, source: Any, *, as_of: str) -> int:
+        return self._calibration.reconcile(source, as_of=as_of)
 
     def close(self) -> None:
         self._connection.close()

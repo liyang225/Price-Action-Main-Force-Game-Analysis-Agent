@@ -1,6 +1,6 @@
 # 知识库概念 ↔ PA Agent Prompt 映射（参考层，不参与每次加载）
 
-维护说明：左侧为外部价格行为知识库中的概念；右侧为 `prompt_engineering` 文件与 `detected_patterns`。
+维护说明：左侧为 `D:\价格行为学习资料\extracted_text` 双链库路径；右侧为 prompt_engineering 文件与 detected_patterns。
 
 | 知识库概念/主题 | detected_patterns / entry_setup | prompt 文件 |
 |-----------------|----------------------------------|-------------|

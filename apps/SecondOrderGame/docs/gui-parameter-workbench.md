@@ -5,7 +5,7 @@
 在项目根目录运行：
 
 ```powershell
-python -m src.gui.workbench
+C:\Users\bai\AppData\Local\Programs\Python\Python314\python.exe -m src.gui.workbench
 ```
 
 界面读取 `config/hmm_prior.yaml`。打开、切换模式和预览都不会写磁盘；只有点击“校验并保存”且完整配置通过生产校验后才会原子写入。

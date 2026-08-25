@@ -44,10 +44,12 @@ class PAEmbeddedService:
         dsa_refresher: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
         progress_sink: ProgressSink | None = None,
         llm_observation_sink: Callable[[str, str, str], None] | None = None,
+        confusion_database: Path | str | None = ROOT / "runtime" / "labeler" / "confusion.db",
         labeler_catchup: bool = True,
         labeler_catchup_sectors: Callable[[], Mapping[str, str]] | None = None,
         labeler_catchup_sink: Callable[[str], None] | None = None,
         labeler_status_tracker: LabelerStatusTracker | None = None,
+        calibration_reconcile: bool = True,
         capital_flow_catchup: bool = True,
         capital_flow_database: Path | str | None = None,
         capital_flow_scope: Callable[[], tuple[Iterable[str], Iterable[str]]] | None = None,
@@ -62,14 +64,21 @@ class PAEmbeddedService:
         self._dsa_runtime_enabled = bool(dsa_runtime_enabled)
         self._dsa_refresher = dsa_refresher
         self._progress_sink = progress_sink if progress_sink is not None else ProgressSink()
+        if llm_observation_sink is None and confusion_database is not None:
+            from src.labeler.confusion_counts import build_llm_observation_sink
+
+            llm_observation_sink = build_llm_observation_sink(confusion_database)
         self._llm_observation_sink = llm_observation_sink
         self._labeler_catchup = bool(labeler_catchup)
         self._labeler_catchup_sectors = labeler_catchup_sectors
         self._labeler_catchup_sink = labeler_catchup_sink or self._emit_labeler_catchup
         self._labeler_status = labeler_status_tracker or LabelerStatusTracker()
+        self._calibration_reconcile = bool(calibration_reconcile)
         self._capital_flow_catchup = bool(capital_flow_catchup)
         self._capital_flow_scope = capital_flow_scope
-        self._capital_flow_catchup_sink = capital_flow_catchup_sink or self._emit_capital_flow_catchup
+        self._capital_flow_catchup_sink = (
+            capital_flow_catchup_sink or self._emit_capital_flow_catchup
+        )
         self._capital_flow_db = _resolve_capital_flow_database(capital_flow_database)
         self._pa_settings_path = (
             Path(pa_settings_path) if pa_settings_path is not None else None
@@ -92,6 +101,7 @@ class PAEmbeddedService:
             news_emotion_analyzer_factory or self._create_news_emotion_analyzer
         )
         self._start_labeler_catchup()
+        self._start_calibration_reconcile()
         self._start_capital_flow_catchup()
 
     def _emit_labeler_catchup(self, message: str) -> None:
@@ -99,6 +109,43 @@ class PAEmbeddedService:
 
     def _emit_capital_flow_catchup(self, message: str) -> None:
         self._emit("info", message, stage="capital_flow", source="catchup")
+
+    def _start_calibration_reconcile(self) -> None:
+        """Resolve pending B forecasts from completed K_120M periods."""
+        if not self._calibration_reconcile:
+            return
+        try:
+            from src.integration.analysis_history import AnalysisHistoryStore
+
+            with AnalysisHistoryStore(self._history_database) as store:
+                summary = store.calibration_summary()
+        except Exception:  # noqa: BLE001 — calibration cannot block workspace startup
+            return
+        if int(summary.get("prediction_count") or 0) <= int(
+            summary.get("resolved_prediction_count") or 0
+        ):
+            return
+
+        market_source = self._market_source
+        history_database = self._history_database
+
+        def reconcile() -> None:
+            try:
+                with AnalysisHistoryStore(history_database) as store:
+                    store.reconcile_calibration(
+                        market_source, as_of=datetime.now().date().isoformat()
+                    )
+            except Exception:  # noqa: BLE001 — an unavailable quote source is retried next startup
+                return
+
+        import threading
+
+        thread = threading.Thread(
+            target=reconcile,
+            name="second-order-calibration-reconcile",
+            daemon=True,
+        )
+        thread.start()
 
     def _start_capital_flow_catchup(self) -> None:
         """Background catch-up of the P0-8 capital-flow ledger window.

@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
+    QDialogButtonBox,
     QFrame,
     QFormLayout,
     QHBoxLayout,
@@ -55,8 +56,12 @@ from pa_agent.gui.second_order_chart import (
     create_second_order_chart_legend,
 )
 
+SECOND_ORDER_KLINE_BARS = 250
 
-DEFAULT_SECOND_ORDER_ROOT = Path(__file__).resolve().parents[3] / "SecondOrderGame"
+
+DEFAULT_SECOND_ORDER_ROOT = Path(
+    r"C:\Users\bai\Documents\我的文档\股票\新项目\SecondOrderGame"
+)
 
 # Tree roles for the material-cache news table: the message row stores its raw
 # snippet under _NEWS_SNIPPET_ROLE; the inline original-text row is flagged
@@ -93,6 +98,11 @@ class _AnalysisResultPanel(QWidget):
         header.addWidget(self._raw_button)
         self._header_layout = header
         layout.addLayout(header)
+        self._header_subtitle = QLabel()
+        self._header_subtitle.setObjectName("mutedLabel")
+        self._header_subtitle.setStyleSheet("color: #7F8A99; font-size: 13px;")
+        self._header_subtitle.hide()
+        layout.addWidget(self._header_subtitle)
         self._scroll = QScrollArea()
         self._scroll.setWidgetResizable(True)
         self._scroll.setFrameShape(QFrame.Shape.NoFrame)
@@ -108,7 +118,7 @@ class _AnalysisResultPanel(QWidget):
             "QFrame#secondOrderFieldCard { background: #11161D; border: 1px solid #2A3039; "
             "border-radius: 4px; } "
             "QLabel#secondOrderFieldName { background: transparent; border: none; "
-            "color: #9AA5B1; font-size: 14px; font-weight: 600; } "
+            "color: #9AA5B1; font-size: 15px; font-weight: 600; } "
             "QLabel#secondOrderFieldValue { background: transparent; border: none; "
             "color: #E8ECF1; font-size: 15px; }"
         )
@@ -120,6 +130,10 @@ class _AnalysisResultPanel(QWidget):
     def set_header_note(self, text: str) -> None:
         self._header_note.setText(text)
         self._header_note.setVisible(bool(text))
+
+    def set_header_subtitle(self, text: str) -> None:
+        self._header_subtitle.setText(text)
+        self._header_subtitle.setVisible(bool(text))
 
     def add_header_action(self, button: QPushButton) -> None:
         self._header_layout.insertWidget(self._header_layout.count() - 1, button)
@@ -438,6 +452,125 @@ class _LabelerStatusCard(QFrame):
             "green": "#63D391",
             "red": "#F07B7B",
         }.get(color, "#9AA5B1")
+
+
+class _CalibrationSummaryPanel(QFrame):
+    """Compact, read-only Brier report for the history backtest tab."""
+
+    _OUTCOME_LABELS = {
+        "gap_down": "低于预期",
+        "near_reference": "符合预期",
+        "gap_up": "超预期强",
+        "target_first": "先触及止盈",
+        "stop_first": "先触及止损",
+    }
+    _DIRECTION_LABELS = {
+        "increase": "增加该结果先验",
+        "decrease": "减少该结果先验",
+        "hold": "保持当前先验",
+    }
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("secondOrderCalibrationPanel")
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 10, 12, 12)
+        layout.setSpacing(7)
+
+        heading = QHBoxLayout()
+        title = QLabel("概率校准（Brier）")
+        title.setObjectName("secondOrderCalibrationTitle")
+        heading.addWidget(title)
+        heading.addStretch(1)
+        note = QLabel("离线评估 · 不自动调参")
+        note.setObjectName("secondOrderCalibrationNote")
+        heading.addWidget(note)
+        layout.addLayout(heading)
+
+        self._status = QLabel("完成一次二阶分析后开始记录概率快照。")
+        self._status.setObjectName("secondOrderCalibrationStatus")
+        self._status.setWordWrap(True)
+        layout.addWidget(self._status)
+
+        self._table = QTableWidget(0, 5)
+        self._table.setObjectName("secondOrderCalibrationTable")
+        self._table.setHorizontalHeaderLabels(
+            ["概率项", "决策点", "样本", "Brier", "先验建议"]
+        )
+        self._table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self._table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        self._table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._table.verticalHeader().hide()
+        header = self._table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
+        self._table.setVisible(False)
+        layout.addWidget(self._table)
+
+        self.setStyleSheet(
+            "QFrame#secondOrderCalibrationPanel { background: #11161D; "
+            "border: 1px solid #2A3039; border-radius: 4px; } "
+            "QLabel#secondOrderCalibrationTitle { color: #E8ECF1; font-size: 15px; "
+            "font-weight: 600; border: none; background: transparent; } "
+            "QLabel#secondOrderCalibrationNote, QLabel#secondOrderCalibrationStatus { "
+            "color: #9AA5B1; font-size: 13px; border: none; background: transparent; } "
+            "QTableWidget#secondOrderCalibrationTable { background: #0D1218; "
+            "alternate-background-color: #111820; border: 1px solid #252C35; "
+            "gridline-color: #252C35; color: #D8DEE7; } "
+            "QTableWidget#secondOrderCalibrationTable QHeaderView::section { "
+            "background: #171D25; color: #9AA5B1; border: none; "
+            "border-bottom: 1px solid #2A3039; padding: 5px 8px; font-weight: 600; }"
+        )
+
+    def set_summary(self, summary: Mapping[str, Any] | None) -> None:
+        value = summary if isinstance(summary, Mapping) else {}
+        reports = value.get("reports")
+        reports = reports if isinstance(reports, list) else []
+        predictions = int(value.get("prediction_count") or 0)
+        resolved = int(value.get("resolved_prediction_count") or 0)
+        minimum = int(value.get("minimum_sample_count") or 30)
+
+        if predictions == 0:
+            self._status.setText("完成一次二阶分析后开始记录概率快照。")
+        else:
+            self._status.setText(
+                f"实际结果回填 {resolved} / {predictions}；"
+                f"每个结果满 {minimum} 次后发布 Brier 分数和先验调整方向。"
+            )
+
+        self._table.setRowCount(len(reports))
+        for row, report in enumerate(reports):
+            report = report if isinstance(report, Mapping) else {}
+            probability_type = str(report.get("probability_type") or "—")
+            outcome = str(report.get("outcome") or "")
+            outcome_label = self._OUTCOME_LABELS.get(outcome, outcome or "—")
+            status = str(report.get("status") or "")
+            brier = report.get("brier_score")
+            direction = str(report.get("prior_adjustment_direction") or "")
+            cells = (
+                f"{probability_type} · {outcome_label}",
+                str(report.get("decision_point") or "—"),
+                str(int(report.get("sample_count") or 0)),
+                f"{float(brier):.4f}"
+                if status == "available" and isinstance(brier, (int, float))
+                else "样本不足",
+                self._DIRECTION_LABELS.get(direction, "待评估"),
+            )
+            for column, text in enumerate(cells):
+                item = QTableWidgetItem(text)
+                if column in {1, 2, 3}:
+                    item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                self._table.setItem(row, column, item)
+        self._table.setVisible(bool(reports))
+        if reports:
+            visible_rows = min(len(reports), 6)
+            row_height = max(self._table.verticalHeader().defaultSectionSize(), 28)
+            self._table.setFixedHeight(
+                self._table.horizontalHeader().height() + visible_rows * row_height + 3
+            )
 
 
 class _AnalysisFlowCard(QFrame):
@@ -840,6 +973,7 @@ def _embedded_service(
             market_source,
             news_fallback_provider=fallback,
             sector_market_source=sector_market_source,
+            max_bars=SECOND_ORDER_KLINE_BARS,
             max_news_items=max_news_items,
         ),
         model_client=PAChatClientAdapter(
@@ -930,7 +1064,7 @@ def _kline_chart_payload(source: Any, payload: Mapping[str, Any]) -> dict[str, A
 
     symbol = str(payload.get("symbol") or "").strip()
     subscribed_symbol = str(getattr(source, "_symbol", "") or symbol).strip()
-    adapter = PAMarketDataAdapter(source, max_bars=500)
+    adapter = PAMarketDataAdapter(source, max_bars=SECOND_ORDER_KLINE_BARS)
     bars = adapter.get_kline(
         subscribed_symbol,
         "K_120M",
@@ -1516,7 +1650,12 @@ class SecondOrderWorkspace(QWidget):
         self._pa_context = pa_context
         self._pa_settings = getattr(pa_context, "settings", None)
         self._payload: dict[str, Any] = {}
+        self._last_result_envelope: dict[str, Any] | None = None
         self._chat_context: list[dict[str, str]] = []
+        from pa_agent.records.prompt_library import PromptLibraryStore
+
+        self._chat_prompt_library = PromptLibraryStore()
+        self._chat_prompt_usage: dict[str, int] = {}
         self._workers: set[_ApiWorker] = set()
         self._pending_analysis = False
         self._last_symbol = ""
@@ -1540,6 +1679,13 @@ class SecondOrderWorkspace(QWidget):
         return "120m"
 
     def analysis_tabs(self) -> tuple[str, ...]:
+        """Return the labels in the primary analysis navigation.
+
+        The two compound areas (博弈推演 and 应对方案) intentionally expose
+        their related views through an inner tab bar.  Callers that need to
+        inspect those views can use ``_game_tabs``/``_response_tabs``; the
+        public summary reflects the navigation users see at the top level.
+        """
         return tuple(self._tabs.tabText(index) for index in range(self._tabs.count()))
 
     def set_symbol(self, symbol: str) -> None:
@@ -1616,6 +1762,37 @@ class SecondOrderWorkspace(QWidget):
         ).strip()
         if hasattr(self, "_sector_code_edit"):
             self._sector_code_edit.setText(configured_sector_code)
+        if self._result_matches_payload(payload):
+            # Re-entering the 二阶博弈 tab re-sends PA's handoff payload. Keep the
+            # just-finished result visible instead of replacing it with placeholders.
+            self._render_analysis_result(
+                self._last_result_envelope or {}, refresh_history=False
+            )
+            return
+
+    def _result_matches_payload(self, payload: Mapping[str, Any]) -> bool:
+        envelope = self._last_result_envelope
+        if not isinstance(envelope, Mapping):
+            return False
+        result = envelope.get("result")
+        result = result if isinstance(result, Mapping) else {}
+        input_ = result.get("input")
+        input_ = input_ if isinstance(input_, Mapping) else {}
+        if self._symbol_key(str(input_.get("symbol") or "")) != self._symbol_key(
+            str(payload.get("symbol") or "")
+        ):
+            return False
+        materials = input_.get("materials")
+        materials = materials if isinstance(materials, Mapping) else {}
+        sector = materials.get("sector_analysis")
+        sector = sector if isinstance(sector, Mapping) else {}
+        result_code = str(sector.get("sector_code") or "").strip()
+        payload_code = str(payload.get("sector_code") or "").strip()
+        if result_code and payload_code and result_code != payload_code:
+            return False
+        result_name = str(sector.get("sector_name") or "").strip()
+        payload_name = str(payload.get("sector_name") or "").strip()
+        return not (result_name and payload_name and result_name != payload_name)
 
     @staticmethod
     def _symbol_key(symbol: str) -> str:
@@ -1655,6 +1832,28 @@ class SecondOrderWorkspace(QWidget):
             "sector_code": self._sector_code_edit.text().strip(),
         }
         settings.symbol_preferences = preferences
+
+    def _save_trade_rules(self, text: str) -> bool:
+        """Persist global rules separately from the current instrument settings."""
+        if self._pa_settings is None:
+            QMessageBox.warning(self, "无法保存", "PA 设置未初始化")
+            return False
+        try:
+            from pa_agent.config.paths import SETTINGS_JSON_PATH
+            from pa_agent.config.settings import load_settings, save_settings
+
+            latest = load_settings(SETTINGS_JSON_PATH)
+            latest.second_order.trade_rules = text
+            save_settings(latest, SETTINGS_JSON_PATH)
+            persisted = load_settings(SETTINGS_JSON_PATH).second_order
+            if persisted.trade_rules != text:
+                raise OSError("settings.json write verification failed")
+            self._pa_settings.second_order = persisted.model_copy(deep=True)
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.warning(self, "保存失败", str(exc) or type(exc).__name__)
+            return False
+        self._status.setText("交易规则已保存")
+        return True
 
     @staticmethod
     def _decision_point_text(value: object) -> str:
@@ -1729,7 +1928,19 @@ class SecondOrderWorkspace(QWidget):
         self._game_reasoning = self._prototype_tab("game", "等待参与者、行为与概率推演。")
         self._reasoning = self._game_reasoning
         self._tree = self._prototype_tab("tree", "超预期强 / 符合预期 / 低于预期三分支将在结果返回后显示。")
+        self._tree.set_trade_rules(
+            str(
+                getattr(
+                    getattr(self._pa_settings, "second_order", None),
+                    "trade_rules",
+                    "",
+                )
+                or ""
+            ),
+            self._save_trade_rules,
+        )
         self._gate = self._text_tab("T+1 独立闸门：等待 PA 原闸门与二阶数据。")
+        self._gate.set_header_subtitle("什么时候该有信心，什么时候不该")
         self._sector = self._prototype_tab("sector", "请在设置页填写与个股高度相关的板块名称。")
         market_tab = QWidget()
         market_layout = QVBoxLayout(market_tab)
@@ -1745,6 +1956,36 @@ class SecondOrderWorkspace(QWidget):
         )
         self._market.add_header_action(self._market_regenerate)
         market_layout.addWidget(self._market, 1)
+
+        # Keep the primary navigation short and group the views that answer
+        # the same user question.  This mirrors the prototype: the outer tab
+        # names the work area, while the inner tab switches its perspective.
+        self._game_tabs = self._make_subtabs(
+            "gameAnalysisSubTabs",
+            (
+                ("博弈推演", self._game_reasoning),
+                ("板块分析", self._sector),
+                ("大盘分析", market_tab),
+            ),
+        )
+        self._game_tab = self._wrap_subtabs(self._game_tabs)
+
+        self._response_tabs = self._make_subtabs(
+            "responseAnalysisSubTabs",
+            (
+                ("应对树", self._tree),
+                ("T+1入场信心", self._gate),
+            ),
+        )
+        self._response_tab = self._wrap_subtabs(self._response_tabs)
+
+        # Set titles explicitly because these panels now live below a
+        # compound tab and are no longer named by the outer tab loop.
+        self._game_reasoning.set_title("博弈推演")
+        self._sector.set_title("板块分析")
+        self._tree.set_title("应对树")
+        self._gate.set_title("T+1入场信心")
+
         self._materials = self._build_material_runtime_tab()
         self._history = self._build_history_tab()
         self._chat = self._build_chat_tab()
@@ -1753,11 +1994,8 @@ class SecondOrderWorkspace(QWidget):
         for name, widget in (
             ("概览", overview_tab),
             ("情绪周期", self._cycle),
-            ("博弈推演", self._game_reasoning),
-            ("应对树", self._tree),
-            ("T+1 闸门", self._gate),
-            ("板块分析", self._sector),
-            ("大盘分析", market_tab),
+            ("博弈推演", self._game_tab),
+            ("应对方案", self._response_tab),
             ("材料缓存", self._materials),
             ("历史回测", self._history),
             ("LLM 对话", self._chat),
@@ -1771,8 +2009,14 @@ class SecondOrderWorkspace(QWidget):
         self._tabs.currentChanged.connect(self._on_analysis_tab_changed)
         self._tabs.setMinimumWidth(430)
         self._tabs.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        # The nested tab strip sits inside this outer pane.  Qt's native base
+        # painter otherwise draws a bright horizontal guide through the top of
+        # the nested buttons; the prototype only uses the explicit dark
+        # divider on the nested bar's bottom edge.
+        self._tabs.tabBar().setDrawBase(False)
         self._tabs.setStyleSheet(
-            "QTabWidget::pane { border: 0; } "
+            "QTabWidget::pane { background: #0C0E11; border: none; "
+            "border-top: 0px; top: 0px; margin: 0px; } "
             "QTabBar::tab:focus { outline: none; } "
             "QTabBar::tab:selected { border-bottom: 1px solid #333A45; }"
         )
@@ -1780,6 +2024,76 @@ class SecondOrderWorkspace(QWidget):
         split.setStretchFactor(1, 60)
         split.setSizes([448, 672])
         root.addWidget(split, 1)
+
+    @staticmethod
+    def _make_subtabs(
+        object_name: str,
+        tabs: tuple[tuple[str, QWidget], ...],
+    ) -> QTabWidget:
+        """Create a compact, keyboard-accessible tab bar for a compound view."""
+        widget = QTabWidget()
+        widget.setObjectName(object_name)
+        widget.setDocumentMode(True)
+        widget.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        # Qt's native tab-base painter draws an extra bright guide line
+        # behind the buttons.  The prototype only has the explicit divider
+        # below the buttons, so disable the native base before applying QSS.
+        widget.tabBar().setDrawBase(False)
+        style = (
+            # Figma selection 4:269 / 5:625 uses the same deep-gray stroke
+            # (#2B3542) around the sub-tabs.  The divider belongs to the
+            # tab-bar's bottom edge; the pane itself must not add a second
+            # (often white, theme-provided) line on its top edge.
+            f"QTabWidget#{object_name}::pane {{ background: #111820; "
+            "border: none; top: 0px; margin: 0px; } "
+            "QTabWidget::pane { background: #111820; border: none; "
+            "top: 0px; margin: 0px; } "
+            f"QTabWidget#{object_name} QStackedWidget#qt_tabwidget_stackedwidget {{ "
+            "background: #111820; border: none; } "
+            "QTabBar { border-bottom: 1px solid #2B3542; } "
+            "QTabBar::tab { padding: 5px 14px; margin-right: 2px; "
+            "color: #9AAAC0; background: #111820; "
+            "border: 1px solid #2B3542; border-bottom: none; } "
+            "QTabBar::tab:hover { color: #EFF4FB; background: #111820; } "
+            "QTabBar::tab:selected { color: #EFF4FB; background: #111820; "
+            "border-color: #2B3542; border-bottom: none; } "
+            "QTabBar::tab:focus { outline: none; }"
+        )
+        for label, page in tabs:
+            widget.addTab(page, label)
+        # Reapply after tab insertion so the style reaches Qt's lazily-created
+        # pane/stacked-widget children as well as the tab bar itself.
+        widget.setStyleSheet(style)
+        return widget
+
+    @staticmethod
+    def _wrap_subtabs(subtabs: QTabWidget) -> QWidget:
+        """Give nested tabs the same breathing room as the other side-panel views."""
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        # Keep the primary/sub-tab rhythm, but reduce it by the requested 5px
+        # from the previous 20px value.
+        layout.setContentsMargins(0, 15, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(subtabs)
+
+        # The content page currently carries its own 10px top inset.  Since
+        # the divider now sits directly on the tab-bar bottom edge, remove
+        # that extra inset inside compound tabs only (without changing the
+        # spacing of standalone result panels).
+        for index in range(subtabs.count()):
+            page = subtabs.widget(index)
+            page_layout = page.layout()
+            if page_layout is None:
+                continue
+            margins = page_layout.contentsMargins()
+            page_layout.setContentsMargins(
+                margins.left(),
+                max(0, margins.top() - 10),
+                margins.right(),
+                margins.bottom(),
+            )
+        return container
 
     def control_bar(self) -> QWidget:
         """Return the host-owned second-order control bar."""
@@ -1809,9 +2123,59 @@ class SecondOrderWorkspace(QWidget):
         )
         self._chat_transcript.setReadOnly(True)
         conversation_layout.addWidget(self._chat_transcript, 1)
+
+        prompt_row = QHBoxLayout()
+        prompt_row.setContentsMargins(0, 0, 0, 0)
+        self._chat_prompt_toggle = QToolButton()
+        self._chat_prompt_toggle.setText("提示词 ▸")
+        self._chat_prompt_toggle.setCheckable(True)
+        self._chat_prompt_toggle.setToolButtonStyle(
+            Qt.ToolButtonStyle.ToolButtonTextBesideIcon
+        )
+        self._chat_prompt_toggle.toggled.connect(self._toggle_chat_prompt_library)
+        prompt_row.addWidget(self._chat_prompt_toggle)
+        self._chat_quick_prompt_buttons: list[QPushButton] = []
+        for _ in range(3):
+            button = QPushButton()
+            button.setObjectName("quickPromptButton")
+            button.setMaximumWidth(168)
+            button.setVisible(False)
+            button.clicked.connect(
+                lambda _checked=False, target=button: self._insert_chat_quick_prompt(target)
+            )
+            prompt_row.addWidget(button)
+            self._chat_quick_prompt_buttons.append(button)
+        prompt_row.addStretch(1)
+        conversation_layout.addLayout(prompt_row)
+
+        self._chat_prompt_list = QListWidget()
+        self._chat_prompt_list.setMaximumHeight(140)
+        self._chat_prompt_list.setContextMenuPolicy(
+            Qt.ContextMenuPolicy.CustomContextMenu
+        )
+        self._chat_prompt_list.itemClicked.connect(self._insert_chat_prompt)
+        self._chat_prompt_list.customContextMenuRequested.connect(
+            self._show_chat_prompt_context_menu
+        )
+        self._chat_prompt_list_panel = QWidget()
+        prompt_list_layout = QVBoxLayout(self._chat_prompt_list_panel)
+        prompt_list_layout.setContentsMargins(0, 0, 0, 0)
+        prompt_list_actions = QHBoxLayout()
+        prompt_list_actions.setContentsMargins(0, 0, 0, 4)
+        self._add_chat_prompt_button = QPushButton("+ 添加提示词")
+        self._add_chat_prompt_button.setObjectName("ghostButton")
+        self._add_chat_prompt_button.clicked.connect(self._add_chat_prompt)
+        prompt_list_actions.addWidget(self._add_chat_prompt_button)
+        prompt_list_actions.addStretch(1)
+        prompt_list_layout.addLayout(prompt_list_actions)
+        prompt_list_layout.addWidget(self._chat_prompt_list)
+        self._chat_prompt_list_panel.setVisible(False)
+        conversation_layout.addWidget(self._chat_prompt_list_panel)
+
         row = QHBoxLayout()
         self._chat_input = QLineEdit()
         self._chat_input.setPlaceholderText("输入补充材料或追问")
+        self._chat_input.returnPressed.connect(self._send_chat_context)
         row.addWidget(self._chat_input, 1)
         send = QPushButton("发送")
         send.clicked.connect(self._send_chat_context)
@@ -1845,8 +2209,131 @@ class SecondOrderWorkspace(QWidget):
         self._sent_source_text.setVisible(False)
         audit_layout.addWidget(self._sent_source_text, 2)
         layout.addWidget(audit_panel, 2)
+        self._refresh_chat_prompt_list()
         self._update_llm_trace([])
         return widget
+
+    def _toggle_chat_prompt_library(self, visible: bool) -> None:
+        self._chat_prompt_toggle.setText("提示词 ▾" if visible else "提示词 ▸")
+        self._chat_prompt_list_panel.setVisible(visible)
+        if visible:
+            self._refresh_chat_prompt_list()
+
+    def _refresh_chat_prompt_list(self) -> None:
+        self._chat_prompt_library = type(self._chat_prompt_library)()
+        self._chat_prompt_list.clear()
+        snippets = list(self._chat_prompt_library.items)
+        snippets.sort(
+            key=lambda snippet: -self._chat_prompt_usage.get(snippet.id, 0)
+        )
+        for button, snippet in zip(
+            self._chat_quick_prompt_buttons, snippets[:3], strict=False
+        ):
+            button.setText(snippet.name)
+            button.setToolTip(snippet.text)
+            button.setProperty("promptId", snippet.id)
+            button.setVisible(True)
+        for button in self._chat_quick_prompt_buttons[len(snippets[:3]) :]:
+            button.setVisible(False)
+            button.setProperty("promptId", None)
+        for snippet in snippets:
+            item = QListWidgetItem(snippet.name)
+            item.setData(Qt.ItemDataRole.UserRole, snippet.id)
+            item.setToolTip(snippet.text)
+            self._chat_prompt_list.addItem(item)
+
+    def _insert_chat_prompt_id(self, item_id: object) -> None:
+        snippet = (
+            self._chat_prompt_library.get(item_id)
+            if isinstance(item_id, str)
+            else None
+        )
+        if snippet is None:
+            return
+        cursor = self._chat_input.cursorPosition()
+        current = self._chat_input.text()
+        self._chat_input.setText(current[:cursor] + snippet.text + current[cursor:])
+        self._chat_input.setCursorPosition(cursor + len(snippet.text))
+        self._chat_input.setFocus()
+        self._chat_prompt_usage[snippet.id] = (
+            self._chat_prompt_usage.get(snippet.id, 0) + 1
+        )
+        self._refresh_chat_prompt_list()
+
+    def _insert_chat_quick_prompt(self, button: QPushButton) -> None:
+        self._insert_chat_prompt_id(button.property("promptId"))
+
+    def _insert_chat_prompt(self, list_item: QListWidgetItem) -> None:
+        self._insert_chat_prompt_id(list_item.data(Qt.ItemDataRole.UserRole))
+
+    def _show_chat_prompt_context_menu(self, position) -> None:
+        list_item = self._chat_prompt_list.itemAt(position)
+        if list_item is None:
+            return
+        item_id = list_item.data(Qt.ItemDataRole.UserRole)
+        if not isinstance(item_id, str):
+            return
+        menu = QMenu(self)
+        edit_action = menu.addAction("编辑提示词...")
+        edit_action.triggered.connect(lambda: self._edit_chat_prompt(item_id))
+        delete_action = menu.addAction("删除提示词")
+        delete_action.triggered.connect(lambda: self._delete_chat_prompt(item_id))
+        menu.exec(self._chat_prompt_list.viewport().mapToGlobal(position))
+
+    def _add_chat_prompt(self) -> None:
+        self._edit_chat_prompt()
+
+    def _edit_chat_prompt(self, item_id: str | None = None) -> None:
+        snippet = (
+            self._chat_prompt_library.get(item_id) if item_id is not None else None
+        )
+        dialog = QDialog(self)
+        dialog.setWindowTitle("编辑提示词" if snippet is not None else "新增提示词")
+        layout = QVBoxLayout(dialog)
+        form = QFormLayout()
+        name_edit = QLineEdit(snippet.name if snippet is not None else "")
+        text_edit = QPlainTextEdit(snippet.text if snippet is not None else "")
+        text_edit.setMinimumHeight(130)
+        form.addRow("名称", name_edit)
+        form.addRow("内容", text_edit)
+        layout.addLayout(form)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save
+            | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        try:
+            if snippet is None:
+                self._chat_prompt_library.add(
+                    name=name_edit.text(), text=text_edit.toPlainText()
+                )
+            else:
+                self._chat_prompt_library.update(
+                    snippet.id, name=name_edit.text(), text=text_edit.toPlainText()
+                )
+        except ValueError as exc:
+            QMessageBox.warning(self, "无法保存提示词", str(exc))
+            return
+        self._refresh_chat_prompt_list()
+
+    def _delete_chat_prompt(self, item_id: str) -> None:
+        snippet = self._chat_prompt_library.get(item_id)
+        if snippet is None:
+            return
+        answer = QMessageBox.question(
+            self,
+            "删除提示词",
+            f"确定删除提示词“{snippet.name}”？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer == QMessageBox.StandardButton.Yes:
+            self._chat_prompt_library.remove(item_id)
+            self._refresh_chat_prompt_list()
 
     def _toggle_sent_source(self, expanded: bool) -> None:
         self._sent_source_text.setVisible(expanded)
@@ -1954,6 +2441,8 @@ class SecondOrderWorkspace(QWidget):
         layout.addLayout(toolbar)
         self._history_summary_label = QLabel("已结算 0 / 30，样本不足，暂不发布胜率。")
         layout.addWidget(self._history_summary_label)
+        self._history_calibration = _CalibrationSummaryPanel()
+        layout.addWidget(self._history_calibration)
         self._history_table = QTableWidget(0, 6)
         self._history_table.setObjectName("secondOrderHistoryTable")
         self._history_table.setStyleSheet(
@@ -2089,7 +2578,7 @@ class SecondOrderWorkspace(QWidget):
         run_materials = QPushButton("立即预分析")
         run_materials.clicked.connect(self._run_material_preanalysis)
         controls.addWidget(run_materials)
-        raw_fields = QPushButton("返回原始字段")
+        raw_fields = QPushButton("原始字段")
         raw_fields.setCheckable(True)
         raw_fields.setToolTip("展开/收起材料缓存原始字段（任务状态、缓存生命周期等）")
         raw_fields.toggled.connect(self._toggle_raw_material_fields)
@@ -2226,7 +2715,7 @@ class SecondOrderWorkspace(QWidget):
             str(getattr(second_order_settings, "dsa_database_path", "") or "")
         )
         self._dsa_database_edit.setPlaceholderText(
-            "请选择 DSA 数据库文件或其 data 文件夹"
+            r"请选择 DSA 路径中的 data 文件夹，例如 E:\Daily stock analysis\data"
         )
         form.addRow("DSA data 文件夹", self._dsa_database_edit)
         self._futu_host_edit = QLineEdit(
@@ -3043,6 +3532,7 @@ class SecondOrderWorkspace(QWidget):
     def _render_analysis_result(
         self, envelope: Mapping[str, Any], *, refresh_history: bool = True
     ) -> None:
+        self._last_result_envelope = dict(envelope)
         result = envelope.get("result")
         result = result if isinstance(result, Mapping) else {}
         input_ = result.get("input")
@@ -3054,9 +3544,11 @@ class SecondOrderWorkspace(QWidget):
         gates = result.get("integrated_gates")
         gates = gates if isinstance(gates, Mapping) else {}
         participant_priors = {}
+        participant_posteriors = {}
         materials = input_.get("materials")
         if isinstance(materials, Mapping):
             participant_priors = materials.get("participant_priors") or {}
+            participant_posteriors = materials.get("participant_posteriors") or {}
         else:
             materials = {}
         metadata = tree.get("analysis_metadata")
@@ -3102,7 +3594,7 @@ class SecondOrderWorkspace(QWidget):
         scenario_statuses = [
             {
                 "情景": item.get("name"),
-                "概率": self._scenario_opening_probability(item),
+                "概率": self._scenario_period_probability(item),
                 "状态": item.get("status"),
             }
             for item in branches
@@ -3135,12 +3627,14 @@ class SecondOrderWorkspace(QWidget):
                 "程序化博弈信号": self._game_signal_summary(input_.get("game_signals")),
                 "参与者识别": participant_analysis,
                 "参与者先验": participant_priors,
+                "参与者后验": participant_posteriors,
                 "主导参与者行为推演": first.get("a_class"),
             },
             {
                 "game_signals": input_.get("game_signals"),
                 "participant_analysis": participant_analysis,
                 "participant_priors": participant_priors,
+                "participant_posteriors": participant_posteriors,
                 "a_class": first.get("a_class"),
                 "probability_chain": tree.get("probability_chain"),
                 "branches": branches,
@@ -3152,7 +3646,7 @@ class SecondOrderWorkspace(QWidget):
                 "B/C三情景概率": [
                     {
                         "情景": item.get("name"),
-                        "该情景明天开盘概率": self._scenario_opening_probability(item),
+                        "下一完整时段概率": self._scenario_period_probability(item),
                         "开盘首次下跌达止损概率": self._stop_first_probability(item),
                         "状态": item.get("status"),
                         "应对": item.get("action_advice") or "暂无可执行动作",
@@ -3167,10 +3661,6 @@ class SecondOrderWorkspace(QWidget):
             [
                 [("T+1 结论", gate_display["结论"], 1)],
                 [("新增买入", gate_display["新增买入"], 1)],
-                [
-                    ("PA 阶段 2 闸门", gate_display["PA 闸门"], 1),
-                    ("二阶数据状态", gate_display["二阶数据"], 1),
-                ],
                 [("缺少的前置条件", gate_display["原因"], 1)],
                 [("下一步", gate_display["下一步"], 1)],
             ],
@@ -3288,7 +3778,7 @@ class SecondOrderWorkspace(QWidget):
         }.get(str(value or ""), "暂无结论")
 
     @classmethod
-    def _scenario_opening_probability(cls, branch: Mapping[str, Any]) -> str:
+    def _scenario_period_probability(cls, branch: Mapping[str, Any]) -> str:
         values = branch.get("b_class")
         if not isinstance(values, Mapping):
             return "暂无数据"
@@ -3447,6 +3937,7 @@ class SecondOrderWorkspace(QWidget):
             history_summary = service_type.history_summary(symbol)
         except Exception as exc:  # noqa: BLE001
             self._history_text.setPlainText(f"历史记录读取失败：{exc}")
+            self._history_calibration.set_summary(None)
             return
         self._history_records = {int(item["id"]): item for item in records}
         self._history_table.setRowCount(len(records))
@@ -3468,6 +3959,7 @@ class SecondOrderWorkspace(QWidget):
             f"胜 {history_summary.get('wins', 0)} / 负 {history_summary.get('losses', 0)} / "
             f"持平 {history_summary.get('neutral', 0)} | 胜率 {rate_text}"
         )
+        self._history_calibration.set_summary(history_summary.get("calibration"))
         if records:
             self._history_table.selectRow(0)
         else:
@@ -3497,7 +3989,8 @@ class SecondOrderWorkspace(QWidget):
         self._render_analysis_result(
             {"ok": True, "result": result}, refresh_history=False
         )
-        self._tabs.setCurrentWidget(self._game_reasoning)
+        self._tabs.setCurrentWidget(self._game_tab)
+        self._game_tabs.setCurrentWidget(self._game_reasoning)
 
     def _replay_history(self) -> None:
         record = getattr(self, "_history_records", {}).get(self._history_id_spin.value())

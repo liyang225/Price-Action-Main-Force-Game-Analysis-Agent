@@ -105,10 +105,16 @@ class BehaviorCountStore:
         ``participant == "主力"`` stock rows are counted into the main-force W
         row; retail rows are skipped until the retail labeler exists.
 
-        Returns per-(cycle, behavior) increment counts.
+        The current rule-hash pair is rebuilt from the immutable label ledger
+        on every pass.  This is intentionally deterministic: stock labels and
+        capital-flow participant evidence can arrive after the sector label,
+        so a one-shot ``sector/day reconciled`` marker would permanently lose
+        those late observations.
+
+        Returns per-(cycle, behavior) count deltas.  An unchanged replay
+        returns an empty mapping.
         """
-        increments: dict[str, int] = {}
-        # Iterate every labeled sector day.
+        desired: dict[tuple[str, str, str], int] = {}
         sector_rows = ledger.sector_labels(rule_hash=cycle_rule_hash, status="labeled")
         for sector_row in sector_rows:
             cycle_state = sector_row.label
@@ -116,8 +122,6 @@ class BehaviorCountStore:
                 continue
             date_value = sector_row.trading_date
             sector_code = sector_row.entity
-            if self._reconciled(sector_code, date_value):
-                continue
             # Constituent stock labels on the same day.
             if sector_codes is not None:
                 stock_codes = [
@@ -141,24 +145,48 @@ class BehaviorCountStore:
                 participant = self._participant_of(stock_row)
                 if participant != "主力":
                     continue
-                key = (cycle_rule_hash, behavior_rule_hash, cycle_state, participant, stock_row.label)
-                self._connection.execute(
-                    """
-                    INSERT INTO behavior_counts
-                    (cycle_rule_hash, behavior_rule_hash, cycle_state, participant, behavior, count)
-                    VALUES (?, ?, ?, ?, ?, 1)
-                    ON CONFLICT(cycle_rule_hash, behavior_rule_hash, cycle_state, participant, behavior)
-                    DO UPDATE SET count = count + 1
-                    """,
-                    key,
-                )
-                increments[str(key)] = increments.get(str(key), 0) + 1
+                key = (cycle_state, participant, stock_row.label)
+                desired[key] = desired.get(key, 0) + 1
+
+        previous = self.counts(
+            cycle_rule_hash=cycle_rule_hash,
+            behavior_rule_hash=behavior_rule_hash,
+        )
+        if previous == desired:
+            return {}
+
+        with self._connection:
             self._connection.execute(
-                "INSERT OR IGNORE INTO behavior_reconciled (sector_code, trading_date) VALUES (?, ?)",
-                (sector_code, date_value),
+                "DELETE FROM behavior_counts "
+                "WHERE cycle_rule_hash = ? AND behavior_rule_hash = ?",
+                (cycle_rule_hash, behavior_rule_hash),
             )
-        self._connection.commit()
-        return increments
+            self._connection.executemany(
+                """
+                INSERT INTO behavior_counts
+                (cycle_rule_hash, behavior_rule_hash, cycle_state, participant, behavior, count)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    (
+                        cycle_rule_hash,
+                        behavior_rule_hash,
+                        cycle_state,
+                        participant,
+                        behavior,
+                        count,
+                    )
+                    for (cycle_state, participant, behavior), count in desired.items()
+                ),
+            )
+        changed_keys = set(previous) | set(desired)
+        return {
+            str((cycle_rule_hash, behavior_rule_hash, *key)): (
+                desired.get(key, 0) - previous.get(key, 0)
+            )
+            for key in changed_keys
+            if desired.get(key, 0) != previous.get(key, 0)
+        }
 
     def _stock_rows_for_day(
         self, ledger: LabelLedger, sector_code: str, date_value: str, behavior_rule_hash: str
@@ -172,13 +200,6 @@ class BehaviorCountStore:
             if self._sector_code_of(stock_row) == sector_code:
                 rows.append(stock_row)
         return rows
-
-    def _reconciled(self, sector_code: str, trading_date: str) -> bool:
-        row = self._connection.execute(
-            "SELECT 1 FROM behavior_reconciled WHERE sector_code = ? AND trading_date = ?",
-            (sector_code, trading_date),
-        ).fetchone()
-        return row is not None
 
     @staticmethod
     def _participant_of(stock_row: Any) -> str | None:

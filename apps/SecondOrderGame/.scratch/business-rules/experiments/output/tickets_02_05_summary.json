@@ -1,0 +1,374 @@
+{
+  "benchmark": {
+    "absolute": {
+      "dominant_share": 0.471287819523437,
+      "negative": {
+        "count": 25027,
+        "share": 0.2645728058862084
+      },
+      "neutral": {
+        "count": 44581,
+        "share": 0.471287819523437
+      },
+      "positive": {
+        "count": 24986,
+        "share": 0.2641393745903546
+      }
+    },
+    "confusion": {
+      "columns": [
+        "negative",
+        "neutral",
+        "positive"
+      ],
+      "data": [
+        [
+          10611,
+          13970,
+          446
+        ],
+        [
+          3916,
+          37359,
+          3306
+        ],
+        [
+          908,
+          11048,
+          13030
+        ]
+      ],
+      "index": [
+        "negative",
+        "neutral",
+        "positive"
+      ]
+    },
+    "excluded_missing_benchmark_count": 13488,
+    "relative": {
+      "dominant_share": 0.6594181449140537,
+      "negative": {
+        "count": 15435,
+        "share": 0.16317102564644692
+      },
+      "neutral": {
+        "count": 62377,
+        "share": 0.6594181449140537
+      },
+      "positive": {
+        "count": 16782,
+        "share": 0.17741082943949935
+      }
+    },
+    "valid_count": 94594
+  },
+  "extreme_market": {
+    "absolute": {
+      "negative_count": 5358,
+      "negative_share": 0.6169257340241796
+    },
+    "daily_concentration": {
+      "absolute_negative_share_max": 0.9285714285714286,
+      "absolute_negative_share_mean": 0.6183515734339023,
+      "absolute_negative_share_median": 0.6166666666666667,
+      "date_count": 147,
+      "relative_negative_share_max": 0.509090909090909,
+      "relative_negative_share_mean": 0.23576453321618085,
+      "relative_negative_share_median": 0.21666666666666667
+    },
+    "definition": {
+      "column": "market_forward_return",
+      "operator": "<=",
+      "threshold": -0.03
+    },
+    "excluded_if_absolute_extreme_filter": {
+      "count": 8685,
+      "share": 0.09181343425587246
+    },
+    "extreme_count": 8685,
+    "extreme_share": 0.09181343425587246,
+    "relative": {
+      "negative_count": 2033,
+      "negative_share": 0.23408175014392632
+    },
+    "valid_count": 94594
+  },
+  "input": {
+    "benchmark_count": 1,
+    "feature_row_count": 108082,
+    "ineligible_missing_data_count": 13488,
+    "ineligible_missing_data_share": 0.12479413778427491,
+    "row_count": 129126,
+    "sector_count": 12,
+    "skipped_stocks": [],
+    "stock_count": 60
+  },
+  "overlap": {
+    "combination_counts": {
+      "出货": 614,
+      "建仓": 4279,
+      "建仓 + 狩猎止损": 13,
+      "拉升": 479,
+      "狩猎止损": 189,
+      "观望": 19401,
+      "震仓": 561
+    },
+    "combination_shares": {
+      "出货": 0.006490897942787069,
+      "建仓": 0.04523542719411379,
+      "建仓 + 狩猎止损": 0.000137429435270736,
+      "拉升": 0.0050637461149755795,
+      "狩猎止损": 0.001998012558936085,
+      "观望": 0.20509757489904223,
+      "震仓": 0.005930608706683299
+    },
+    "overlap_count": 13,
+    "overlap_share": 0.000137429435270736,
+    "per_label": {
+      "出货": {
+        "count": 614,
+        "share": 0.006490897942787069
+      },
+      "建仓": {
+        "count": 4292,
+        "share": 0.04537285662938453
+      },
+      "拉升": {
+        "count": 479,
+        "share": 0.0050637461149755795
+      },
+      "狩猎止损": {
+        "count": 202,
+        "share": 0.0021354419942068207
+      },
+      "观望": {
+        "count": 19401,
+        "share": 0.20509757489904223
+      },
+      "震仓": {
+        "count": 561,
+        "share": 0.005930608706683299
+      }
+    },
+    "row_count": 94594,
+    "unmatched_count": 69058,
+    "unmatched_share": 0.7300463031481912
+  },
+  "parameters": {
+    "extreme_market_threshold": -0.03,
+    "forward_days": 5,
+    "negative_threshold": -0.03,
+    "positive_threshold": 0.03,
+    "volume_window": 20
+  },
+  "resolved_distribution": {
+    "per_label": {
+      "出货": {
+        "count": 614,
+        "share_of_all": 0.006490897942787069
+      },
+      "建仓": {
+        "count": 4279,
+        "share_of_all": 0.04523542719411379
+      },
+      "拉升": {
+        "count": 479,
+        "share_of_all": 0.0050637461149755795
+      },
+      "狩猎止损": {
+        "count": 202,
+        "share_of_all": 0.0021354419942068207
+      },
+      "观望": {
+        "count": 19401,
+        "share_of_all": 0.20509757489904223
+      },
+      "震仓": {
+        "count": 561,
+        "share_of_all": 0.005930608706683299
+      }
+    },
+    "row_count": 94594,
+    "unmatched_count": 69058,
+    "unmatched_share": 0.7300463031481912
+  },
+  "rule_diagnostics": {
+    "shakeout_vs_stop_hunt": {
+      "boundary_feature": "support_break_pct",
+      "conflict_count": 0,
+      "conflict_share_of_union": 0.0,
+      "shakeout_condition": "> -0.005",
+      "stop_hunt_condition": "<= -0.005",
+      "union_count": 763
+    }
+  },
+  "rules": {
+    "forward_return_feature": "forward_excess_return",
+    "priority": [
+      "狩猎止损",
+      "震仓",
+      "拉升",
+      "出货",
+      "建仓",
+      "观望"
+    ],
+    "sha256": "d3e8759a1ba26faf66a6a8a1eef2d1db473f601ce65fd14c38be86cd2541f60a",
+    "version": "candidate-2026-08-10"
+  },
+  "schema_version": "1",
+  "unmatched_analysis": {
+    "count": 69058,
+    "coverage": 0.2699536968518088,
+    "coverage_by_sector": {
+      "SH.LIST0002": {
+        "coverage": 0.20384815392615704,
+        "eligible_count": 7692,
+        "matched_count": 1568
+      },
+      "SH.LIST0006": {
+        "coverage": 0.3906927829630603,
+        "eligible_count": 7607,
+        "matched_count": 2972
+      },
+      "SH.LIST0026": {
+        "coverage": 0.27115651406230296,
+        "eligible_count": 7929,
+        "matched_count": 2150
+      },
+      "SH.LIST0047": {
+        "coverage": 0.3507246376811594,
+        "eligible_count": 7935,
+        "matched_count": 2783
+      },
+      "SH.LIST0055": {
+        "coverage": 0.25993730407523513,
+        "eligible_count": 7975,
+        "matched_count": 2073
+      },
+      "SH.LIST0068": {
+        "coverage": 0.20667586899234533,
+        "eligible_count": 7969,
+        "matched_count": 1647
+      },
+      "SH.LIST0924": {
+        "coverage": 0.23817292006525284,
+        "eligible_count": 7969,
+        "matched_count": 1898
+      },
+      "SH.LIST0931": {
+        "coverage": 0.3158620689655172,
+        "eligible_count": 7975,
+        "matched_count": 2519
+      },
+      "SH.LIST0949": {
+        "coverage": 0.3650156739811912,
+        "eligible_count": 7975,
+        "matched_count": 2911
+      },
+      "SH.LIST0953": {
+        "coverage": 0.19641689551458089,
+        "eligible_count": 7647,
+        "matched_count": 1502
+      },
+      "SH.LIST0960": {
+        "coverage": 0.2045141065830721,
+        "eligible_count": 7975,
+        "matched_count": 1631
+      },
+      "SH.LIST0967": {
+        "coverage": 0.23684872892021142,
+        "eligible_count": 7946,
+        "matched_count": 1882
+      }
+    },
+    "coverage_by_year": {
+      "2020": {
+        "coverage": 0.2177723059096176,
+        "eligible_count": 13808,
+        "matched_count": 3007
+      },
+      "2021": {
+        "coverage": 0.21909526787575567,
+        "eligible_count": 14391,
+        "matched_count": 3153
+      },
+      "2022": {
+        "coverage": 0.2345056311752919,
+        "eligible_count": 14473,
+        "matched_count": 3394
+      },
+      "2023": {
+        "coverage": 0.31322314049586775,
+        "eligible_count": 14520,
+        "matched_count": 4548
+      },
+      "2024": {
+        "coverage": 0.27038212167195474,
+        "eligible_count": 14498,
+        "matched_count": 3920
+      },
+      "2025": {
+        "coverage": 0.36407466078931056,
+        "eligible_count": 14519,
+        "matched_count": 5286
+      },
+      "2026": {
+        "coverage": 0.26571258199165176,
+        "eligible_count": 8385,
+        "matched_count": 2228
+      }
+    },
+    "eligible_row_count": 94594,
+    "feature_summary": {
+      "forward_excess_return": {
+        "count": 69058,
+        "mean": 0.0004268989030724701,
+        "median": -0.003899625282322239,
+        "q25": -0.02636712045751166,
+        "q75": 0.020598633286925405
+      },
+      "forward_stock_return": {
+        "count": 69058,
+        "mean": 0.0018537644179069815,
+        "median": -0.004665332245067155,
+        "q25": -0.038571844288265905,
+        "q75": 0.03200204283922109
+      },
+      "range_pct": {
+        "count": 69054,
+        "mean": 0.04418435512974135,
+        "median": 0.03506554881791177,
+        "q25": 0.024230108440213706,
+        "q75": 0.052167036088869856
+      },
+      "return_1d": {
+        "count": 69054,
+        "mean": 0.0012620030210347562,
+        "median": -0.0021271270667095887,
+        "q25": -0.018206339859557524,
+        "q75": 0.01832747999700718
+      },
+      "volatility_20": {
+        "count": 68975,
+        "mean": 0.03269708899560322,
+        "median": 0.02427476972682818,
+        "q25": 0.016982599159863252,
+        "q75": 0.03414998122603739
+      },
+      "volume_ratio_20": {
+        "count": 68978,
+        "mean": 1.2464925137680278,
+        "median": 1.063714142287607,
+        "q25": 0.8175997286317747,
+        "q75": 1.4382220195516153
+      }
+    },
+    "ineligible_missing_data_count": 13488,
+    "share": 0.7300463031481912,
+    "watch_if_used_as_fallback": {
+      "fallback_watch_count": 88459,
+      "inflation_multiple": 4.559507241894748,
+      "observed_watch_count": 19401
+    }
+  }
+}
