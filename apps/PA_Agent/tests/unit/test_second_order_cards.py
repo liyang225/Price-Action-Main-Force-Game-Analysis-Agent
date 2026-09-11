@@ -30,6 +30,7 @@ from pa_agent.gui.second_order_cards import (  # noqa: E402
     _RangeBar,
     _ScenarioCards,
     _SummaryBand,
+    _scenario_convention,
 )
 
 
@@ -269,7 +270,20 @@ def test_scenario_cards_renders_main_and_alternatives(qtbot) -> None:
     assert "符合预期" in texts
     assert "超预期强" in texts and "低于预期" in texts
     assert "保持观望，不因小波动行动" in texts
-    assert "下一时段概率" in texts
+    assert "历史样本频率" in texts
+    # ADR-0030：情景名是契约标识，数字是「下一完整时段」分桶频率，必须标出口径，
+    # 否则「超预期强 44%」会被读成次日大幅高开的预测。
+    assert any("次日上午收盘较今日收盘" in text for text in texts)
+    assert any("不是次日开盘跳空预测" in text for text in texts)
+
+
+def test_scenario_convention_defines_every_bucket() -> None:
+    assert "≥ +1%" in _scenario_convention("超预期强")
+    assert "-1% ~ +1%" in _scenario_convention("符合预期")
+    assert "≤ -1%" in _scenario_convention("低于预期")
+    # 未知情景名仍给出口径行，不静默退化成没有口径的裸百分数。
+    assert _scenario_convention(None) == "口径：下一完整时段收益分桶"
+    assert _scenario_convention("未知情景") == "口径：下一完整时段收益分桶"
 
 
 def test_scenario_cards_empty_renders_placeholder(qtbot) -> None:
@@ -306,7 +320,21 @@ def test_cycle_page_maps_contract_fields(qtbot) -> None:
                     2,
                 )
             ],
-            [("LLM 周期观测", {"观测周期": "发酵", "置信度": "中"}, 2)],
+            [
+                (
+                    "LLM 周期观测",
+                    {
+                        "status": "ok",
+                        "cycle_position": "发酵",
+                        "cycle_event": "平台整理",
+                        "confidence": "中",
+                        "consensus_state": "分歧",
+                        "consensus_direction": "转强",
+                        "role": "hmm_noise_sensor",
+                    },
+                    2,
+                )
+            ],
             [
                 (
                     "HMM 后验信念",
@@ -320,11 +348,13 @@ def test_cycle_page_maps_contract_fields(qtbot) -> None:
     texts = _label_texts(panel)
     assert "50.00" in texts
     assert "已计算" in texts
-    assert "0.40" in texts  # news_delta 0.4 -> 0.40
-    assert "发酵" in texts  # LLM 观测
+    # 情绪指数明细 已并入 summary band 的 note，不再是独立卡片。
+    assert any("消息增量 +0.40" in text for text in texts)
+    assert "AI 原始判断" in texts
+    assert "发酵" in texts  # 大模型原始标签
     assert "49.5%" in texts  # HMM 信念
-    # band + formula + details + observation + belief + stretch
-    assert panel._cards_layout.count() == 6
+    # band + state/belief grid + formula + stretch
+    assert panel._cards_layout.count() == 4
 
 
 def test_cycle_page_pending_status_maps_to_waiting(qtbot) -> None:
@@ -341,7 +371,88 @@ def test_cycle_page_pending_status_maps_to_waiting(qtbot) -> None:
     )
     texts = _label_texts(panel)
     assert "等待推演" in texts
-    assert panel._cards_layout.count() == 6
+    assert "等待观测" in texts  # 观测载荷缺失时的占位
+    assert "等待 HMM 更新" in texts
+    assert panel._cards_layout.count() == 4
+
+
+def test_cycle_page_separates_raw_llm_judgment_from_hmm_calibrated_cycle(qtbot) -> None:
+    """The raw LLM label and the HMM posterior mode must not share a label.
+
+    ``cycle_position`` is the noisy-sensor read-out and ``sector_belief``'s
+    arg-max is the program's calibrated cycle, so the card names them
+    ``AI 原始判断`` and ``HMM 校准判断`` instead of the old 观测/有效 wording.
+    """
+    panel = PrototypeAnalysisPanel("cycle")
+    qtbot.addWidget(panel)
+    panel.set_grouped_payload(
+        [
+            [("情绪指数", 50.0, 1), ("情绪指数计算公式", "基准 50.0", 2)],
+            [("情绪指数明细", {"status": "computed"}, 2)],
+            [
+                (
+                    "LLM 周期观测",
+                    {
+                        "status": "ok",
+                        "cycle_position": "发酵",
+                        "cycle_event": "平台整理",
+                        "confidence": "中",
+                        "consensus_state": "分歧",
+                        "consensus_direction": "转强",
+                        "role": "hmm_noise_sensor",
+                    },
+                    2,
+                )
+            ],
+            [
+                (
+                    "HMM 后验信念",
+                    {"冰点": 0.2535, "发酵": 0.1763, "启动": 0.4952, "退潮": 0.0333, "高潮": 0.0417},
+                    2,
+                )
+            ],
+        ],
+        {"raw": True},
+    )
+    texts = _label_texts(panel)
+    assert "AI 原始判断" in texts
+    assert "HMM 校准判断（最终采用）" in texts
+    assert "发酵" in texts  # raw LLM label
+    assert "启动" in texts  # HMM posterior mode
+    assert "观测周期" not in texts
+    assert "有效周期" not in texts
+    assert "降级" not in "".join(texts)
+
+
+def test_cycle_page_flags_fallback_pa_as_non_observation(qtbot) -> None:
+    """``fallback_pa`` reuses a program cycle position, so the card must say so."""
+    panel = PrototypeAnalysisPanel("cycle")
+    qtbot.addWidget(panel)
+    panel.set_grouped_payload(
+        [
+            [("情绪指数", 50.0, 1), ("情绪指数计算公式", "基准 50.0", 2)],
+            [("情绪指数明细", {"status": "computed"}, 2)],
+            [
+                (
+                    "LLM 周期观测",
+                    {
+                        "status": "fallback_pa",
+                        "cycle_position": "发酵",
+                        "key_evidence": [],
+                        "reason": "ModelRequest timed out after 30.0s",
+                    },
+                    2,
+                )
+            ],
+            [("HMM 后验信念", {"冰点": 0.5, "启动": 0.5}, 2)],
+        ],
+        {"raw": True},
+    )
+    texts = _label_texts(panel)
+    joined = "".join(texts)
+    assert "发酵（降级，非大模型输出）" in texts
+    assert "大模型周期判断本次不可用" in joined
+    assert "ModelRequest timed out after 30.0s" in joined
 
 
 def test_game_page_maps_contract_fields(qtbot) -> None:
@@ -369,7 +480,7 @@ def test_game_page_maps_contract_fields(qtbot) -> None:
             "参与者识别": {"participant": "散户", "key_evidence": ["成交量未放大，情绪指数中性"]},
             "参与者先验": _PRIORS,
             "参与者后验": _POSTERIORS,
-            "主导参与者行为推演": {
+            "当前行为与 A 类概率": {
                 "散户": {"model_behavior": "观望", "probabilities": {"观望": 0.258, "底部建仓": 0.25}, "prior_weight": 1.0}
             },
         },
@@ -384,7 +495,8 @@ def test_game_page_maps_contract_fields(qtbot) -> None:
     assert "36.1%" in texts
     assert "25.8%" in texts
     assert "当下参与者行为推断（HMM行为先验）" in texts
-    assert "该参与者下一步博弈行为推演" in texts
+    assert "当下参与者行为推断（HMM 行为后验）" in texts
+    assert "当前散户行为" in texts
     assert "45.0%" in texts
     assert "24.0%" in texts
     forecast_grid = panel.findChild(_FourColumnGrid)
@@ -396,8 +508,8 @@ def test_game_page_maps_contract_fields(qtbot) -> None:
     assert all(card.width() > 0 for card in cards)
     assert {forecast_grid.layout_.itemAt(index).widget().layout().itemAt(0).widget().text() for index in range(4)} == {
         "参与者",
-        "该参与者下一步博弈行为推演",
-        "行为概率",
+        "当前散户行为",
+        "A 类概率（程序计算）",
         "先验权重",
     }
 
@@ -409,8 +521,8 @@ def test_game_page_empty_payload_renders_full_skeleton(qtbot) -> None:
     assert "纳什均衡带" in texts
     assert "参与者识别" in texts
     assert "当下参与者行为推断（HMM行为先验）" in texts
-    assert "HMM 行为后验" in texts
-    assert "主导参与者行为推演" in texts
+    assert "当下参与者行为推断（HMM 行为后验）" in texts
+    assert "当前行为与 A 类概率" in texts
     assert "建仓" in texts and "FOMO追高" in texts  # 行为条骨架
     assert panel._cards_layout.count() >= 2
 
@@ -461,6 +573,49 @@ def test_tree_page_empty_renders_three_scenario_placeholders(qtbot) -> None:
     assert texts.count("—") >= 3  # 三张卡概率占位
 
 
+def test_tree_page_shows_the_behavior_tendency_of_each_scenario(qtbot) -> None:
+    """§10.2：每个情景都要给出该情景下参与者最可能的行为。"""
+    panel = PrototypeAnalysisPanel("tree")
+    qtbot.addWidget(panel)
+    panel.set_payload(
+        {
+            "B/C三情景概率": [
+                {
+                    "情景": "符合预期",
+                    "下一完整时段概率": "60.0%",
+                    "状态": "待确认",
+                    "行为倾向": "继续派发为主；观望为次（触发：高位横盘）",
+                    "风险": "主力继续派发，随时转折",
+                    "应对": "高位不接盘",
+                },
+                {
+                    "情景": "超预期强",
+                    "下一完整时段概率": "25.0%",
+                    "状态": "待确认",
+                    "行为倾向": "继续借利好派发（触发：新增重磅利好）",
+                    "风险": "最后一波拉升后崩盘",
+                    "应对": "不追高",
+                },
+                {
+                    "情景": "低于预期",
+                    "下一完整时段概率": "15.0%",
+                    "状态": "待确认",
+                    # 没有行为倾向与风险时不占位
+                    "应对": "快速离场",
+                },
+            ]
+        },
+        {"raw": True},
+    )
+    texts = _label_texts(panel)
+    assert "行为倾向：继续派发为主；观望为次（触发：高位横盘）" in texts
+    assert "行为倾向：继续借利好派发（触发：新增重磅利好）" in texts
+    assert sum(1 for text in texts if text.startswith("行为倾向：")) == 2
+    assert "风险：主力继续派发，随时转折" in texts
+    assert "风险：最后一波拉升后崩盘" in texts
+    assert sum(1 for text in texts if text.startswith("风险：")) == 2
+
+
 def test_tree_page_trade_rules_toggle_edit_and_save(qtbot) -> None:
     saved: list[str] = []
     panel = PrototypeAnalysisPanel("tree")
@@ -497,7 +652,8 @@ def test_sector_page_maps_contract_fields(qtbot) -> None:
                         "sector_code": "SH.BK0001",
                         "sentiment_index": 50.0,
                         "cycle_position": "启动",
-                        "cycle_position_source": "llm_pending",
+                        "cycle_position_source": "hmm_posterior",
+                        "llm_observation": "发酵",
                     },
                     3,
                 )
@@ -514,23 +670,6 @@ def test_sector_page_maps_contract_fields(qtbot) -> None:
                     2,
                 ),
             ],
-            [("HMM 行为先验（政策环境修正）", _PRIORS, 3)],
-            [
-                (
-                    "新闻与事件材料",
-                    {
-                        "items": [
-                            {
-                                "title": "新闻A",
-                                "sentiment_score": 0.5,
-                                "snippet": "摘要文本",
-                                "source": "财联社",
-                            }
-                        ]
-                    },
-                    1,
-                )
-            ],
         ],
         {"raw": True},
     )
@@ -538,9 +677,13 @@ def test_sector_page_maps_contract_fields(qtbot) -> None:
     assert "半导体" in texts
     assert "SH.BK0001" in texts
     assert "政策暖风" in texts
-    assert "36.1%" in texts
-    assert "新闻A" in texts
-    assert panel._cards_layout.count() == 5  # 4 卡 + stretch
+    assert "周期位置" in texts
+    assert "启动" in texts  # sector_analysis.cycle_position（HMM 校准判断）
+    assert "AI 原始判断" in texts
+    assert "发酵" in texts  # sector_analysis.llm_observation（大模型原始标签）
+    assert "软信号：命中词：降准" in texts
+    # 板块结构 + 政策环境 两张卡：HMM 行为先验与新闻材料都不在本页契约内
+    assert panel._cards_layout.count() == 2  # grid + stretch
 
 
 def test_sector_data_cards_precede_policy_environment(qtbot) -> None:

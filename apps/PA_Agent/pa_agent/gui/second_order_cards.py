@@ -56,6 +56,28 @@ _SEG_IDLE = "#53606F"
 _FONT_UI = '"Microsoft YaHei UI", "Segoe UI", sans-serif'
 _FONT_NUM = '"Cascadia Mono", "Consolas", monospace'
 
+# ---------------------------------------------------------------------------
+# B 类情景口径（ADR-0030）
+# ---------------------------------------------------------------------------
+# B 类概率描述的是「下一完整 K_120M 时段」收益，情景名（超预期强 / 符合预期 /
+# 低于预期）仍沿用闸门契约标识。若只显示情景名与百分数，「超预期强 44%」会被
+# 读成「明天大幅高开 44%」；因此在卡片上显式标出分桶口径与「历史样本频率」性质。
+_SCENARIO_FREQUENCY_CAPTION = "历史样本频率"
+_SCENARIO_FREQUENCY_NOTE = (
+    "三情景数字为 B 类历史样本频率：次日上午收盘相对今日收盘的完整时段收益分桶"
+    "（≥+1% / -1%~+1% / ≤-1%），不是次日开盘跳空预测；情景名沿用既有契约标识。"
+)
+_SCENARIO_CONVENTIONS: dict[str, str] = {
+    "超预期强": "口径：次日上午收盘较今日收盘 ≥ +1%（含低开高走）",
+    "符合预期": "口径：次日上午收盘较今日收盘在 -1% ~ +1% 之间",
+    "低于预期": "口径：次日上午收盘较今日收盘 ≤ -1%",
+}
+
+
+def _scenario_convention(name: object) -> str:
+    """Return the B-class bucket definition shown under a scenario title."""
+    return _SCENARIO_CONVENTIONS.get(str(name or ""), "口径：下一完整时段收益分桶")
+
 
 def _num(value: object, digits: int = 1) -> str:
     """Render a number compactly, or an em-dash when unusable.
@@ -707,6 +729,7 @@ class _ScenarioCards(QWidget):
             )
             root.addWidget(placeholder)
             return
+        root.addWidget(self._frequency_note())
         main, alternatives = self._split_main(branches)
         root.addWidget(self._main_card(main))
         if alternatives:
@@ -738,6 +761,18 @@ class _ScenarioCards(QWidget):
         ordered = sorted(branches, key=prob_of, reverse=True)
         return ordered[0], ordered[1:]
 
+    @staticmethod
+    def _frequency_note() -> QLabel:
+        """State once, above the cards, that these numbers are historical frequencies."""
+        note = QLabel(_SCENARIO_FREQUENCY_NOTE)
+        note.setObjectName("protoScenarioFrequencyNote")
+        note.setWordWrap(True)
+        note.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        note.setStyleSheet(
+            f"background: transparent; border: none; color: {_TEXT_3}; font-size: 13px;"
+        )
+        return note
+
     def _main_card(self, branch: Mapping[str, Any]) -> QFrame:
         card = QFrame()
         card.setObjectName("protoScenarioMain")
@@ -764,7 +799,7 @@ class _ScenarioCards(QWidget):
             f"background: transparent; border: none; color: {_TEXT}; "
             f"font-family: {_FONT_NUM}; font-size: 27px; font-weight: 650;"
         )
-        caption = QLabel("下一时段概率")
+        caption = QLabel(_SCENARIO_FREQUENCY_CAPTION)
         caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
         caption.setStyleSheet(
             f"background: transparent; border: none; color: {_TEXT_2}; font-size: 13px;"
@@ -781,6 +816,19 @@ class _ScenarioCards(QWidget):
             f"background: transparent; border: none; color: {_TEXT}; font-size: 16px; font-weight: 600;"
         )
         body_box.addWidget(title)
+        convention = QLabel(_scenario_convention(branch.get("情景")))
+        convention.setWordWrap(True)
+        convention.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        convention.setStyleSheet(
+            f"background: transparent; border: none; color: {_TEXT_3}; font-size: 13px;"
+        )
+        body_box.addWidget(convention)
+        tendency = self._behavior_tendency(branch)
+        if tendency is not None:
+            body_box.addWidget(tendency)
+        risk = self._behavior_risk(branch)
+        if risk is not None:
+            body_box.addWidget(risk)
         action = QLabel(str(branch.get("应对") or "暂无可执行动作"))
         action.setWordWrap(True)
         action.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
@@ -797,6 +845,38 @@ class _ScenarioCards(QWidget):
         body_box.addWidget(meta)
         root.addWidget(body, 1)
         return card
+
+    @staticmethod
+    def _behavior_tendency(branch: Mapping[str, Any]) -> QLabel | None:
+        """该情景下的行为倾向（模型的三情景推演）；取不到就不占位。
+
+        A 类概率与情景无关，三个情景之所以不同，靠的就是这段「这个情景下参与者
+        会怎么做」（ARCHITECTURE §10.2 要求每情景都给出各参与者最可能的行为）。
+        """
+        text = str(branch.get("行为倾向") or "").strip()
+        if not text:
+            return None
+        label = QLabel(f"行为倾向：{text}")
+        label.setWordWrap(True)
+        label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        label.setStyleSheet(
+            f"background: transparent; border: none; color: {_TEXT_2}; font-size: 13px;"
+        )
+        return label
+
+    @staticmethod
+    def _behavior_risk(branch: Mapping[str, Any]) -> QLabel | None:
+        """该情景下这个行为倾向自身的风险/后续；取不到就不占位。"""
+        text = str(branch.get("风险") or "").strip()
+        if not text:
+            return None
+        label = QLabel(f"风险：{text}")
+        label.setWordWrap(True)
+        label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        label.setStyleSheet(
+            f"background: transparent; border: none; color: {_TEXT_3}; font-size: 13px;"
+        )
+        return label
 
     def _alt_card(self, branch: Mapping[str, Any]) -> QFrame:
         card = QFrame()
@@ -819,6 +899,19 @@ class _ScenarioCards(QWidget):
             f"background: transparent; border: none; color: {_TEXT}; font-size: 15px; font-weight: 600;"
         )
         root.addWidget(title)
+        convention = QLabel(_scenario_convention(branch.get("情景")))
+        convention.setWordWrap(True)
+        convention.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        convention.setStyleSheet(
+            f"background: transparent; border: none; color: {_TEXT_3}; font-size: 12px;"
+        )
+        root.addWidget(convention)
+        tendency = self._behavior_tendency(branch)
+        if tendency is not None:
+            root.addWidget(tendency)
+        risk = self._behavior_risk(branch)
+        if risk is not None:
+            root.addWidget(risk)
         action = QLabel(str(branch.get("应对") or "暂无可执行动作"))
         action.setWordWrap(True)
         action.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
@@ -1059,6 +1152,18 @@ def _styled_text(text: object, *, muted: bool = False) -> QLabel:
     label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
     label.setStyleSheet(
         f"background: transparent; border: none; color: {_TEXT_3 if muted else _TEXT_2}; "
+        "font-size: 14px; line-height: 1.55;"
+    )
+    return label
+
+
+def _notice_text(text: object) -> QLabel:
+    """Degradation notice: same body as _styled_text, warning colour."""
+    label = QLabel(_clean_markdown_text(text) or "暂无数据")
+    label.setWordWrap(True)
+    label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+    label.setStyleSheet(
+        f"background: transparent; border: none; color: {_WARN}; "
         "font-size: 14px; line-height: 1.55;"
     )
     return label
@@ -1388,7 +1493,7 @@ class PrototypeAnalysisPanel(_AnalysisResultPanel):
                         "高位减仓": None,
                     },
                 },
-                "主导参与者行为推演": {},
+                "当前行为与 A 类概率": {},
             }
         if page == "tree":
             return {
@@ -1536,12 +1641,19 @@ class PrototypeAnalysisPanel(_AnalysisResultPanel):
         effective_cycle = (
             max(belief_map, key=belief_map.get) if belief_map else "等待 HMM 更新"
         )
+        # ``fallback_pa`` means the LLM cycle call failed and the program reused a
+        # program-side cycle position.  That value is not an observation, so the
+        # card must say so instead of presenting it as the model's raw judgment.
+        cycle_degraded = str(observation_map.get("status") or "") == "fallback_pa"
+        raw_cycle = observation_map.get("cycle_position") or "等待观测"
+        if cycle_degraded:
+            raw_cycle = f"{raw_cycle}（降级，非大模型输出）"
         state_card = _Card("状态快照")
         state_card.body.addWidget(
             _FactGrid(
                 [
-                    ("观测周期", observation_map.get("cycle_position") or "等待观测"),
-                    ("有效周期", effective_cycle),
+                    ("AI 原始判断", raw_cycle),
+                    ("HMM 校准判断（最终采用）", effective_cycle),
                     ("周期事件", observation_map.get("cycle_event") or "暂无"),
                     ("置信度", observation_map.get("confidence") or "暂无"),
                     ("共识状态", observation_map.get("consensus_state") or "暂无"),
@@ -1551,6 +1663,15 @@ class PrototypeAnalysisPanel(_AnalysisResultPanel):
                 font_family=_FONT_UI,
             )
         )
+        if cycle_degraded:
+            reason = str(observation_map.get("reason") or "").strip()
+            notice = (
+                "大模型周期判断本次不可用，二阶链已降级复用程序侧周期位置："
+                "「AI 原始判断」不是大模型输出，HMM 后验未消费本次观测。"
+            )
+            if reason:
+                notice = f"{notice}原因：{reason}"
+            state_card.body.addWidget(_notice_text(notice))
         grid.add(state_card)
         belief_card = _Card("HMM 后验信念")
         belief_card.body.addWidget(_BeliefBar(belief_map))
@@ -1572,7 +1693,8 @@ class PrototypeAnalysisPanel(_AnalysisResultPanel):
         signals = summary.get("程序化博弈信号")
         participant_analysis = summary.get("参与者识别")
         priors = summary.get("参与者先验")
-        forecast = summary.get("主导参与者行为推演")
+        posteriors = summary.get("参与者后验")
+        forecast = summary.get("当前行为与 A 类概率")
         grid = _TwoColumnGrid()
         if isinstance(signals, Mapping):
             nash = signals.get("纳什均衡带")
@@ -1643,6 +1765,7 @@ class PrototypeAnalysisPanel(_AnalysisResultPanel):
             if participant:
                 facts.append(("主导参与者", participant))
             for key, label in (
+                ("behavior_candidates", "行为候选"),
                 ("identified_behavior", "行为候选"),
                 ("behavior_candidate", "行为候选"),
             ):
@@ -1676,25 +1799,40 @@ class PrototypeAnalysisPanel(_AnalysisResultPanel):
             selected_item = selected_item if isinstance(selected_item, Mapping) else {}
             behavior = selected_item.get("model_behavior")
             probabilities = selected_item.get("probabilities")
-            best_probability: object = "等待推演"
+            # A 类概率由程序计算，且只在「行为候选」范围内归一化：把候选行为
+            # 连同各自概率一起列出，否则单独一个最大值会和下方六行为的先验分布
+            # 被误读成同一个量（分母不同，两者不可比）。
+            probability_display: object = "等待推演"
             if isinstance(probabilities, Mapping) and probabilities:
-                _best_behavior, best_value = max(
+                ranked = sorted(
                     probabilities.items(),
                     key=lambda item: item[1] if isinstance(item[1], (int, float)) else -1,
+                    reverse=True,
                 )
-                best_probability = _pct(best_value) if isinstance(best_value, (int, float)) else str(best_value)
+                probability_display = "\n".join(
+                    f"{name} "
+                    f"{_pct(value) if isinstance(value, (int, float)) else value}"
+                    for name, value in ranked
+                )
             prior_weight = selected_item.get("prior_weight")
             prior_display: object = (
                 _pct(prior_weight)
                 if isinstance(prior_weight, (int, float))
                 else "等待推演"
             )
+            # 大模型只输出行为的离散标签（不输出概率）；这一步在架构里是「当前
+            # 周期状态下的行为识别」，不是对下一时段行为的预测。
+            behavior_label = (
+                f"当前{selected_participant}行为"
+                if selected_participant in {"主力", "散户"}
+                else "当前参与者行为"
+            )
 
             forecast_section = QWidget()
             forecast_layout = QVBoxLayout(forecast_section)
             forecast_layout.setContentsMargins(0, 0, 0, 0)
             forecast_layout.setSpacing(8)
-            section_title = QLabel("主导参与者行为推演")
+            section_title = QLabel("当前行为与 A 类概率")
             section_title.setObjectName("secondOrderFieldName")
             section_title.setStyleSheet(
                 f"background: transparent; border: none; color: {_TEXT}; "
@@ -1704,8 +1842,8 @@ class PrototypeAnalysisPanel(_AnalysisResultPanel):
             forecast_grid = _FourColumnGrid()
             forecast_cards = (
                 ("参与者", selected_participant or "等待识别"),
-                ("该参与者下一步博弈行为推演", behavior or "等待推演"),
-                ("行为概率", best_probability),
+                (behavior_label, behavior or "等待推演"),
+                ("A 类概率（程序计算）", probability_display),
                 ("先验权重", prior_display),
             )
             for column, (title, value) in enumerate(forecast_cards):
@@ -1718,12 +1856,31 @@ class PrototypeAnalysisPanel(_AnalysisResultPanel):
             forecast_layout.addWidget(forecast_grid)
             grid.add(forecast_section, span=2)
 
-        if isinstance(priors, Mapping) and priors:
-            card = _Card("当下参与者行为推断（HMM行为先验）")
-            note = QLabel("周期观测前、经政策环境修正的分布。主力与散户始终并列显示。")
+        # 先验与后验必须成对出现：孤立地显示先验，会让人把它和上方的 A 类概率
+        # 当成同一个量（先验是六行为归一化，A 类只在行为候选内归一化），
+        # 也让「本根 K 线带来了多少 HMM 更新」这件事无从审计。
+        for title, values, note_text in (
+            (
+                "当下参与者行为推断（HMM行为先验）",
+                priors,
+                "周期观测前、经政策环境修正的分布，也是行为推演提示词的输入。"
+                "主力与散户始终并列显示。",
+            ),
+            (
+                "当下参与者行为推断（HMM 行为后验）",
+                posteriors,
+                "同一分布在本根 K 线观测后的更新结果；与先验之差即本根 K 线带来的"
+                " HMM 更新。主力与散户始终并列显示。",
+            ),
+        ):
+            if not isinstance(values, Mapping) or not values:
+                continue
+            card = _Card(title)
+            note = QLabel(note_text)
+            note.setWordWrap(True)
             note.setStyleSheet(f"color: {_TEXT_3}; font-size: 13px;")
             card.body.addWidget(note)
-            card.body.addWidget(_BehaviorBars(priors))
+            card.body.addWidget(_BehaviorBars(values))
             grid.add(card, span=2)
         self._append(grid)
 
@@ -1758,7 +1915,8 @@ class PrototypeAnalysisPanel(_AnalysisResultPanel):
             ("sector_code", "板块代码"),
             ("sentiment_index", "情绪指数"),
             ("cycle_position", "周期位置"),
-            ("effective_cycle_position", "有效周期"),
+            ("llm_observation", "AI 原始判断"),
+            ("effective_cycle_position", "HMM 校准判断"),
             ("consensus", "共识状态"),
             ("consensus_state", "共识状态"),
             ("consensus_direction", "共识方向"),
