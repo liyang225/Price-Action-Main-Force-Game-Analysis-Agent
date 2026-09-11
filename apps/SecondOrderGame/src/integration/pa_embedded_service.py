@@ -55,9 +55,16 @@ class PAEmbeddedService:
         capital_flow_scope: Callable[[], tuple[Iterable[str], Iterable[str]]] | None = None,
         capital_flow_catchup_sink: Callable[[str], None] | None = None,
         pa_settings_path: Path | str | None = None,
+        model_timeout_seconds: float | None = None,
         material_auto_archive: bool = True,
     ) -> None:
         self._market_source = market_source
+        if model_timeout_seconds is not None:
+            from src.integration.model_adapter import FixedTimeoutModelClient
+
+            model_client = FixedTimeoutModelClient(
+                model_client, timeout_seconds=float(model_timeout_seconds)
+            )
         self._model_client = model_client
         self._material_cache = material_cache or _SHARED_MATERIAL_CACHE
         self._history_database = history_database

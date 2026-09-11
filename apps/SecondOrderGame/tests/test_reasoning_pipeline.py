@@ -469,3 +469,163 @@ def test_missing_dragon_tiger_data_is_not_treated_as_neutral_evidence() -> None:
     result = forecaster.forecast(request)
 
     assert result.evidence_trace == ()
+
+
+def _main_force_request(**changes):
+    base = dict(
+        cycle_position="高潮",
+        participant="主力",
+        policy_environment="无干预",
+        materials={"capital_flow": "large-order outflow"},
+        game_signals={"distribution": True},
+        sector_belief={"冰点": 0.1, "启动": 0.1, "发酵": 0.2, "高潮": 0.5, "退潮": 0.1},
+        prior_weight=1.0,
+    )
+    base.update(changes)
+    return BehaviorForecastRequest(**base)
+
+
+def test_forecast_carries_scenario_tendencies_under_the_branch_names() -> None:
+    """提示词要求的三情景行为倾向必须真正进入结果（§10.2 每个情景都要有行为）。"""
+    client = QueueModelClient(
+        [
+            {
+                "behavior": "出货",
+                "key_evidence": ["大单净流出且不回流"],
+                "scenario_expectations": {
+                    "超预期": {
+                        "trigger": "新增重磅利好",
+                        "behavior_shift": "继续借利好派发",
+                        "behavior_tendency": "继续出货为主，保留短暂拉高分支",
+                        "risk": "最后一波拉升后崩盘",
+                    },
+                    "符合预期": {
+                        "trigger": "高位横盘",
+                        "behavior_shift": "继续派发，制造假象",
+                        "behavior_tendency": "继续派发为主，观望为次",
+                    },
+                    "低于预期": {
+                        "trigger": "利空或技术破位",
+                        "behavior_shift": "加速出货或打压",
+                        "behavior_tendency": "偏打压出货，同时检查狩猎止损证据",
+                    },
+                },
+            }
+        ]
+    )
+    router = load_prompt_router(
+        ROOT / "config" / "prompt_routing.yaml", ROOT / "prompt_engine"
+    )
+    forecaster = BehaviorForecaster(client, router, load_config())
+
+    result = forecaster.forecast(_main_force_request())
+
+    assert sorted(result.scenario_expectations) == ["低于预期", "符合预期", "超预期强"]
+    assert (
+        result.scenario_expectations["超预期强"].behavior_tendency
+        == "继续出货为主，保留短暂拉高分支"
+    )
+    assert result.scenario_expectations["超预期强"].risk == "最后一波拉升后崩盘"
+    assert result.scenario_expectations["低于预期"].trigger == "利空或技术破位"
+
+
+def test_malformed_scenario_tendencies_never_fail_the_forecast() -> None:
+    """这段是附加解释，坏数据只能被丢掉，不能把整次推演打回重试。"""
+    client = QueueModelClient(
+        [
+            {
+                "behavior": "出货",
+                "key_evidence": ["大单净流出"],
+                "scenario_expectations": {
+                    "符合预期": {"behavior_tendency": "继续派发", "confidence": "高"},
+                    "低于预期": "这里是文字而不是对象",
+                    "莫名其妙": {"trigger": "无法归类"},
+                },
+            }
+        ]
+    )
+    router = load_prompt_router(
+        ROOT / "config" / "prompt_routing.yaml", ROOT / "prompt_engine"
+    )
+    forecaster = BehaviorForecaster(client, router, load_config())
+
+    result = forecaster.forecast(_main_force_request())
+
+    assert result.model_behavior == "出货"
+    assert sorted(result.scenario_expectations) == ["符合预期"]
+    assert result.scenario_expectations["符合预期"].behavior_tendency == "继续派发"
+    assert result.scenario_expectations["符合预期"].trigger == ""
+
+
+def test_scenario_alias_table_matches_the_response_tree_scenarios() -> None:
+    """别名表与应对树的情景名必须一致，否则倾向会静默落空。"""
+    from src.reasoning.behavior_forecaster import _SCENARIO_ALIASES
+    from src.reasoning.scenario_builder import REQUIRED_SCENARIOS
+
+    assert set(_SCENARIO_ALIASES.values()) == set(REQUIRED_SCENARIOS)
+
+
+def test_every_routed_prompt_carries_the_three_scenario_tendencies() -> None:
+    """被路由到的提示词必须真的给出三情景倾向。
+
+    这个坑很隐蔽：路由按周期选一个文件，文件缺【情景推演】时不会报错，只是应对树
+    的三个情景拿不到行为倾向（而 §10.2 要求每个情景都要给出最可能的行为）。样例里
+    出现 schema 未声明的字段同样不报错，只会让模型照抄后被判不合格、白跑一次。
+    """
+    import re
+
+    import yaml
+
+    from src.reasoning.scenario_builder import REQUIRED_SCENARIOS
+
+    config = yaml.safe_load(
+        (ROOT / "config" / "prompt_routing.yaml").read_text(encoding="utf-8")
+    )
+    routed = sorted({path for per in config["routes"].values() for path in per.values()})
+    assert routed, "路由表为空"
+
+    for relative in routed:
+        text = (ROOT / "prompt_engine" / relative).read_text(encoding="utf-8")
+        assert "【情景推演】" in text, f"{relative} 缺【情景推演】"
+        match = re.search(r"```json\s*(\{.*?\})\s*```", text, re.S)
+        assert match is not None, f"{relative} 缺 JSON 输出规范样例"
+        example = json.loads(match.group(1))
+        assert set(example) <= {
+            "behavior",
+            "key_evidence",
+            "scenario_expectations",
+        }, f"{relative} 样例含 schema 之外的顶层字段：{sorted(set(example) - {'behavior', 'key_evidence', 'scenario_expectations'})}"
+        scenarios = example["scenario_expectations"]
+        assert tuple(scenarios) == tuple(REQUIRED_SCENARIOS), (
+            f"{relative} 情景键应为 {REQUIRED_SCENARIOS}，实际 {list(scenarios)}"
+        )
+        for name, item in scenarios.items():
+            for field in ("trigger", "behavior_shift", "behavior_tendency"):
+                assert str(item.get(field) or "").strip(), (
+                    f"{relative} 的 {name} 缺 {field}"
+                )
+
+
+def test_scenario_expectations_are_serialized_for_the_pa_page() -> None:
+    from src.integration.production_orchestrator import _scenario_expectations_dict
+    from src.reasoning.behavior_forecaster import ScenarioExpectation
+
+    serialized = _scenario_expectations_dict(
+        {
+            "低于预期": ScenarioExpectation(
+                trigger="利空或技术破位",
+                behavior_tendency="偏打压出货",
+                risk="加速下跌，卖在底部",
+            ),
+            "符合预期": {"trigger": "高位横盘", "behavior_tendency": "继续派发"},
+            "坏数据": "not-a-mapping-at-all",
+        }
+    )
+
+    assert serialized["低于预期"]["behavior_tendency"] == "偏打压出货"
+    assert serialized["低于预期"]["behavior_shift"] == ""
+    assert serialized["低于预期"]["risk"] == "加速下跌，卖在底部"
+    assert serialized["符合预期"]["trigger"] == "高位横盘"
+    assert serialized["坏数据"]["behavior_tendency"] == ""
+    assert serialized["坏数据"]["risk"] == ""
+    assert _scenario_expectations_dict(None) == {}

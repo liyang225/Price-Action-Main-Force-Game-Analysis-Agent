@@ -975,3 +975,101 @@ def test_auto_archive_triggers_from_the_lifecycle_poll(tmp_path) -> None:
 
     assert status["state"] == "archived"
     assert (tmp_path / "archives" / "2026-08-14.json").exists()
+
+
+def test_embedded_service_wraps_model_client_with_configured_wait_time(tmp_path) -> None:
+    from src.integration.model_adapter import FixedTimeoutModelClient
+
+    service = PAEmbeddedService(
+        market_source=object(),
+        model_client=object(),
+        material_cache=DailyMaterialCache(tmp_path / "archives"),
+        history_database=tmp_path / "history.db",
+        model_timeout_seconds=150,
+    )
+
+    assert isinstance(service._model_client, FixedTimeoutModelClient)
+    assert service._model_client.timeout_seconds == 150.0
+
+
+def test_embedded_service_keeps_raw_model_client_without_wait_time(tmp_path) -> None:
+    model_client = object()
+    service = PAEmbeddedService(
+        market_source=object(),
+        model_client=model_client,
+        material_cache=DailyMaterialCache(tmp_path / "archives"),
+        history_database=tmp_path / "history.db",
+    )
+
+    assert service._model_client is model_client
+
+
+def test_embedded_service_hands_the_pinned_wait_time_to_the_orchestrator(tmp_path) -> None:
+    """A configured wait time must govern a run, not merely sit on an attribute.
+
+    The orchestrator is the single place that builds the six LLM reasoning
+    modules (participant / behavior / cycle / scenario plus news and
+    subject-purpose), all from the client it is handed.  Capturing that
+    argument is what proves the user's setting reaches every model call.
+    """
+    from src.integration.model_adapter import FixedTimeoutModelClient
+
+    captured: dict[str, Any] = {}
+
+    class Context:
+        pass
+
+    class Builder:
+        def __init__(self, _source: Any) -> None:
+            pass
+
+        def build(self, _pa: Any) -> Context:
+            return Context()
+
+    class Result:
+        def to_dict(self) -> dict[str, Any]:
+            return {"scenario_tree": {"branches": []}}
+
+    class Orchestrator:
+        def run(self, _pa: Any, *, context: Any) -> Result:
+            captured["context"] = context
+            return Result()
+
+        def close(self) -> None:
+            pass
+
+    def orchestrator_factory(client: Any, **_kwargs: Any) -> Orchestrator:
+        captured["client"] = client
+        return Orchestrator()
+
+    cache = DailyMaterialCache(tmp_path / "archives")
+    cache.put("news", "半导体", (NewsItem("测试新闻", "", "", "2026-08-14"),))
+    service = PAEmbeddedService(
+        market_source=object(),
+        model_client=object(),
+        context_builder_factory=Builder,
+        orchestrator_factory=orchestrator_factory,
+        material_cache=cache,
+        history_database=tmp_path / "history.db",
+        model_timeout_seconds=150,
+    )
+
+    result = service.run_analysis(
+        {
+            "symbol": "000001.SZ",
+            "stage2_decision": {
+                "decision": {
+                    "order_type": "限价单",
+                    "entry_price": 10.2,
+                    "take_profit_price": 11.0,
+                    "stop_loss_price": 9.8,
+                    "estimated_win_rate": 63,
+                }
+            },
+        }
+    )
+
+    assert result["ok"] is True
+    client = captured["client"]
+    assert isinstance(client, FixedTimeoutModelClient)
+    assert client.timeout_seconds == 150.0

@@ -4,14 +4,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Any, Mapping
+from typing import TYPE_CHECKING, Any, Mapping
 
 from src.probability.t1_gate import (
     ExecutableAction,
     ExecutableActionKind,
     T1GateStatus,
 )
-from src.reasoning.behavior_forecaster import BehaviorForecast
+
+if TYPE_CHECKING:  # annotations only: a runtime import here loops through
+    # src.integration（__init__ → production_orchestrator → scenario_builder）and
+    # made behavior_forecaster unimportable on its own.
+    from src.reasoning.behavior_forecaster import BehaviorForecast
 
 
 REQUIRED_SCENARIOS = ("超预期强", "符合预期", "低于预期")

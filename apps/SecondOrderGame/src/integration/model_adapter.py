@@ -7,7 +7,7 @@ import re
 import time
 from copy import deepcopy
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 from numbers import Real
 from types import MappingProxyType
@@ -157,13 +157,102 @@ class PAModelClient(Protocol):
     ) -> Any: ...
 
 
+@dataclass(frozen=True, slots=True)
+class FixedTimeoutModelClient(Generic[OutputT]):
+    """Pin every request to one configured wait time at the composition root.
+
+    Reasoning modules keep their own ``ModelRequest`` defaults; hosts inject
+    the user-configured wait time (PA settings ``model_timeout_seconds``)
+    without the domain layer knowing a timeout override exists.  The audit
+    trace ``request_log`` of the wrapped client stays reachable.
+    """
+
+    client: StructuredModelClient[OutputT]
+    timeout_seconds: float
+
+    def __post_init__(self) -> None:
+        if (
+            isinstance(self.timeout_seconds, bool)
+            or not isinstance(self.timeout_seconds, Real)
+            or self.timeout_seconds <= 0
+        ):
+            raise ValueError("timeout_seconds must be a positive number")
+
+    @property
+    def request_log(self) -> list[dict[str, Any]]:
+        return list(getattr(self.client, "request_log", ()))
+
+    def complete(self, request: ModelRequest[OutputT]) -> ModelResponse[OutputT]:
+        if not isinstance(request, ModelRequest):
+            raise TypeError("request must be a ModelRequest")
+        if request.timeout_seconds == self.timeout_seconds:
+            return self.client.complete(request)
+        return self.client.complete(
+            replace(request, timeout_seconds=float(self.timeout_seconds))
+        )
+
+
+def _fetch_with_timeout_retry(
+    fetch: Callable[[], tuple[Any, ...]],
+    *,
+    trace: dict[str, Any],
+    max_retries: int,
+    backoff_seconds: float,
+    on_retry: Callable[[int], None] | None = None,
+) -> tuple[Any, ...]:
+    """Run one ``_fetch`` call, retrying only ``ModelTimeoutError``.
+
+    Network stalls surface as timeouts while the pipeline itself is healthy;
+    the model calls are read-only judgments, so a refetch is idempotent.  The
+    failed attempt's ``_record_trace_error`` entry is cleared when a retry
+    succeeds so the audit trace reflects the final outcome, and every retry
+    is recorded under ``timeout_retries``.
+
+    ``on_retry`` is the host's chance to explain the extra wait: a retry can
+    double the silence the user sees, and the retried attempt re-streams the
+    answer from the start, so an unexplained pause reads as a frozen or
+    restarting pipeline.  The callback runs once per retry, before the backoff.
+    """
+    attempt = 0
+    while True:
+        try:
+            result = fetch()
+        except ModelTimeoutError:
+            attempt += 1
+            if attempt > max_retries:
+                raise
+            trace.setdefault("timeout_retries", []).append(
+                {"attempt": attempt, "backoff_seconds": backoff_seconds}
+            )
+            if on_retry is not None:
+                on_retry(attempt)
+            if backoff_seconds > 0:
+                time.sleep(backoff_seconds)
+        else:
+            if attempt:
+                trace.pop("error", None)
+            return result
+
+
 class PAModelAdapter:
     """Adapt an already-configured PA client without owning provider setup."""
 
-    def __init__(self, pa_client: PAModelClient) -> None:
+    def __init__(
+        self,
+        pa_client: PAModelClient,
+        *,
+        timeout_retries: int = 1,
+        timeout_backoff_seconds: float = 2.0,
+    ) -> None:
         if not callable(getattr(pa_client, "call_text", None)):
             raise TypeError("pa_client must expose call_text(messages, timeout=...)")
+        if timeout_retries < 0:
+            raise ValueError("timeout_retries must be non-negative")
+        if timeout_backoff_seconds < 0:
+            raise ValueError("timeout_backoff_seconds must be non-negative")
         self._pa_client = pa_client
+        self._timeout_retries = int(timeout_retries)
+        self._timeout_backoff_seconds = float(timeout_backoff_seconds)
         self._request_log: list[dict[str, Any]] = []
 
     @property
@@ -230,7 +319,12 @@ class PAModelAdapter:
         trace = _request_trace(request, messages)
         self._request_log.append(trace)
 
-        content, provider, model, usage = self._fetch(messages, request, trace)
+        content, provider, model, usage = _fetch_with_timeout_retry(
+            lambda: self._fetch(messages, request, trace),
+            trace=trace,
+            max_retries=self._timeout_retries,
+            backoff_seconds=self._timeout_backoff_seconds,
+        )
         trace["response"] = _response_trace(
             content=content,
             provider=provider,
@@ -278,6 +372,8 @@ class PAChatClientAdapter:
         provider: str = "PA_Agent",
         activity_callback: Callable[[], None] | None = None,
         token_callback: Callable[[str, str], None] | None = None,
+        timeout_retries: int = 1,
+        timeout_backoff_seconds: float = 2.0,
     ) -> None:
         if not any(
             callable(getattr(pa_client, method, None))
@@ -288,10 +384,16 @@ class PAChatClientAdapter:
             )
         if token_callback is not None and not callable(token_callback):
             raise TypeError("token_callback must be callable")
+        if timeout_retries < 0:
+            raise ValueError("timeout_retries must be non-negative")
+        if timeout_backoff_seconds < 0:
+            raise ValueError("timeout_backoff_seconds must be non-negative")
         self._pa_client = pa_client
         self._provider = provider
         self._activity_callback = activity_callback
         self._token_callback = token_callback
+        self._timeout_retries = int(timeout_retries)
+        self._timeout_backoff_seconds = float(timeout_backoff_seconds)
         self._request_log: list[dict[str, Any]] = []
         self._token_buf: list[tuple[str, str]] = []
         self._token_last_flush = 0.0
@@ -389,6 +491,20 @@ class PAChatClientAdapter:
         content = getattr(reply, "content", None)
         return content, model, usage
 
+    def _on_timeout_retry(self, attempt: int) -> None:
+        """Publish a retry as a status line and keep the UI watchdog alive.
+
+        The token channel carries a distinct ``info`` kind so the host renders
+        the notice as its own transcript block instead of gluing it onto the
+        aborted attempt's half-streamed text.  The activity ping is the second
+        half of the same job: a retry is otherwise a silent gap, and that gap
+        must not make the frontend report the run as stalled.
+        """
+        if self._token_callback is not None:
+            self._token_callback("info", f"大模型响应超时，正在重试（第 {attempt} 次）…")
+        if self._activity_callback is not None:
+            self._activity_callback()
+
     def complete(self, request: ModelRequest[OutputT]) -> ModelResponse[OutputT]:
         messages = [
             {"role": "system", "content": _system_prompt_with_contract(request)},
@@ -397,7 +513,13 @@ class PAChatClientAdapter:
         trace = _request_trace(request, messages)
         self._request_log.append(trace)
 
-        content, model, usage = self._fetch(messages, request, trace)
+        content, model, usage = _fetch_with_timeout_retry(
+            lambda: self._fetch(messages, request, trace),
+            trace=trace,
+            max_retries=self._timeout_retries,
+            backoff_seconds=self._timeout_backoff_seconds,
+            on_retry=self._on_timeout_retry,
+        )
         trace["response"] = _response_trace(
             content=content,
             provider=self._provider,

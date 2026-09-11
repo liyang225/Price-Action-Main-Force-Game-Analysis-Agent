@@ -6,6 +6,7 @@ from typing import Any, Literal
 import pytest
 
 from src.integration.model_adapter import (
+    FixedTimeoutModelClient,
     ModelIllegalEnumError,
     ModelProbabilityViolationError,
     ModelProviderError,
@@ -480,7 +481,10 @@ def test_probability_language_is_allowed_when_it_is_only_quoted_evidence() -> No
 
 
 def test_timeout_from_pa_client_is_not_swallowed() -> None:
-    adapter = PAModelAdapter(FakePAClient(failure=TimeoutError("provider timeout")))
+    adapter = PAModelAdapter(
+        FakePAClient(failure=TimeoutError("provider timeout")),
+        timeout_backoff_seconds=0,
+    )
 
     with pytest.raises(ModelTimeoutError, match="provider timeout"):
         adapter.complete(_request())
@@ -488,6 +492,140 @@ def test_timeout_from_pa_client_is_not_swallowed() -> None:
     trace = adapter.request_log[0]
     assert "response" not in trace
     assert trace["error"]["code"] == "timeout"
+
+
+_VALID_DECISION = (
+    '{"participant":"主力","behavior":"震仓","evidence":["放量回撤"]}'
+)
+
+
+class FlakyTimeoutPAClient:
+    """Fails with ``TimeoutError`` for the first N calls, then succeeds."""
+
+    def __init__(self, response: PAResponse | None = None, *, failures: int) -> None:
+        self.response = response
+        self.remaining_failures = failures
+        self.calls: list[dict[str, Any]] = []
+
+    def call_text(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        timeout: float | None = None,
+    ) -> PAResponse:
+        self.calls.append({"messages": messages, "timeout": timeout})
+        if self.remaining_failures > 0:
+            self.remaining_failures -= 1
+            raise TimeoutError("provider timeout")
+        assert self.response is not None
+        return self.response
+
+
+def test_timeout_is_retried_once_and_success_is_recorded() -> None:
+    client = FlakyTimeoutPAClient(PAResponse(_VALID_DECISION), failures=1)
+    adapter = PAModelAdapter(client, timeout_retries=1, timeout_backoff_seconds=0)
+
+    response = adapter.complete(_request())
+
+    assert response.output.participant == "主力"
+    assert len(client.calls) == 2
+    trace = adapter.request_log[0]
+    assert trace["timeout_retries"] == [{"attempt": 1, "backoff_seconds": 0.0}]
+    assert "error" not in trace
+    assert trace["response"]["content"].startswith("{")
+
+
+def test_timeout_retry_exhaustion_raises_with_failure_trace() -> None:
+    client = FlakyTimeoutPAClient(failures=99)
+    adapter = PAModelAdapter(client, timeout_retries=2, timeout_backoff_seconds=0)
+
+    with pytest.raises(ModelTimeoutError):
+        adapter.complete(_request())
+
+    assert len(client.calls) == 3
+    trace = adapter.request_log[0]
+    assert [entry["attempt"] for entry in trace["timeout_retries"]] == [1, 2]
+    assert trace["error"]["code"] == "timeout"
+
+
+def test_timeout_retries_can_be_disabled() -> None:
+    client = FlakyTimeoutPAClient(failures=99)
+    adapter = PAModelAdapter(client, timeout_retries=0, timeout_backoff_seconds=0)
+
+    with pytest.raises(ModelTimeoutError):
+        adapter.complete(_request())
+
+    assert len(client.calls) == 1
+
+
+def test_chat_adapter_timeout_is_retried_once() -> None:
+    class FlakyStreamClient:
+        def __init__(self) -> None:
+            self.calls = 0
+            self._settings = type("Settings", (), {"model": "configured-model"})()
+
+        def stream_chat(self, messages, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                raise TimeoutError("stream stalled")
+            return type(
+                "Reply",
+                (),
+                {"content": _VALID_DECISION, "usage": FakeUsage()},
+            )()
+
+    client = FlakyStreamClient()
+    adapter = PAChatClientAdapter(client, timeout_retries=1, timeout_backoff_seconds=0)
+
+    response = adapter.complete(_request())
+
+    assert response.output.participant == "主力"
+    assert client.calls == 2
+    trace = adapter.request_log[0]
+    assert trace["timeout_retries"] == [{"attempt": 1, "backoff_seconds": 0.0}]
+    assert "error" not in trace
+
+
+def test_timeout_retry_is_published_as_a_status_line_and_keeps_the_heartbeat() -> None:
+    import time
+
+    class StallingStreamClient:
+        def __init__(self) -> None:
+            self.calls = 0
+            self._settings = type("Settings", (), {"model": "configured-model"})()
+
+        def stream_chat(self, messages, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                kwargs["on_content_token"]("半截")
+                time.sleep(0.09)  # let the throttle flush the aborted attempt
+                kwargs["on_content_token"]("回答")
+                raise TimeoutError("stream stalled")
+            return type(
+                "Reply",
+                (),
+                {"content": _VALID_DECISION, "usage": FakeUsage()},
+            )()
+
+    tokens: list[tuple[str, str]] = []
+    activity: list[str] = []
+    adapter = PAChatClientAdapter(
+        StallingStreamClient(),
+        timeout_retries=1,
+        timeout_backoff_seconds=0,
+        token_callback=lambda kind, chunk: tokens.append((kind, chunk)),
+        activity_callback=lambda: activity.append("alive"),
+    )
+
+    adapter.complete(_request())
+
+    # The notice must not arrive as reasoning/content text: the host renders
+    # each kind as its own transcript block, so the aborted attempt's partial
+    # answer is never glued onto the retried answer.
+    assert tokens[-1] == ("info", "大模型响应超时，正在重试（第 1 次）…")
+    assert ("content", "半截回答") in tokens
+    # One heartbeat from the aborted attempt's flush, one from the retry.
+    assert len(activity) == 2
 
 
 def test_sensenova_gateway_uses_streaming_even_when_chat_exists() -> None:
@@ -580,3 +718,22 @@ def test_request_rejects_non_strict_schema_and_invalid_timeout() -> None:
             response_schema=ParticipantDecision,
             timeout_seconds=0,
         )
+
+
+def test_fixed_timeout_model_client_pins_configured_wait_time() -> None:
+    client = FakePAClient(PAResponse(_VALID_DECISION))
+    adapter = PAModelAdapter(client)
+    wrapper = FixedTimeoutModelClient(adapter, timeout_seconds=120)
+
+    response = wrapper.complete(_request())  # request itself asks for 12.5s
+
+    assert response.output.participant == "主力"
+    assert client.calls[0]["timeout"] == 120.0
+    assert wrapper.request_log == adapter.request_log
+
+
+def test_fixed_timeout_model_client_validates_timeout() -> None:
+    adapter = PAModelAdapter(FakePAClient(PAResponse("unused")))
+
+    with pytest.raises(ValueError, match="timeout_seconds"):
+        FixedTimeoutModelClient(adapter, timeout_seconds=0)

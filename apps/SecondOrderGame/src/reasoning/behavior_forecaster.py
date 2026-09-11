@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Literal, Mapping
+from typing import Any, Literal, Mapping, Sequence
 
 import yaml
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from src.hmm_filter import HMMFilter
 from src.integration.model_adapter import ModelRequest, StrictModelOutput, StructuredModelClient
@@ -24,14 +24,65 @@ DISCLAIMER = "专家先验推演，非统计估计"
 _DEFAULT_EVIDENCE_CONFIG = Path(__file__).parents[2] / "config" / "dragon_tiger_inference.yaml"
 
 
-class MainForceBehaviorModelOutput(StrictModelOutput):
+class ScenarioExpectation(StrictModelOutput):
+    """该情景下参与者会怎么做（提示词【情景推演】段要求的三情景行为倾向）。
+
+    提示词一直要求这段内容，但此前没有声明在响应 schema 里，而系统提示词又禁止
+    输出未声明字段，于是每次都被丢弃——应对树的三个情景因此携带同一份 A 类行为
+    分布，无法区分，而 ARCHITECTURE §10.2 要求每个情景都给出各参与者最可能的行为。
+    """
+
+    trigger: str = ""
+    behavior_shift: str = ""
+    behavior_tendency: str = ""
+    # 该情景下这个行为倾向自身的风险/后续，对应散户提示词里的「后续」一行。
+    # 可选：主力提示词的三情景只写了「应对」，无对应内容时留空。
+    risk: str = ""
+
+
+_SCENARIO_FIELDS = ("trigger", "behavior_shift", "behavior_tendency", "risk")
+
+
+class _BehaviorModelOutput(StrictModelOutput):
+    """Shared behavior-forecast contract: one constrained label + scenario tendencies."""
+
+    key_evidence: tuple[str, ...] = Field(min_length=1)
+    scenario_expectations: dict[str, ScenarioExpectation] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _discard_unusable_scenarios(cls, value: object) -> object:
+        """Never fail the call over the enrichment field.
+
+        The label and its evidence decide the analysis; the scenario tendencies are
+        extra explanation.  Drop entries that are not mappings, keep only the
+        declared keys, and stringify the rest instead of rejecting the whole answer
+        (which would cost a full corrective round-trip).
+        """
+        if not isinstance(value, Mapping):
+            return value
+        raw = value.get("scenario_expectations")
+        if raw is None:
+            return value
+        cleaned: dict[str, dict[str, str]] = {}
+        if isinstance(raw, Mapping):
+            for key, item in raw.items():
+                if not isinstance(item, Mapping):
+                    continue
+                cleaned[str(key)] = {
+                    name: str(item.get(name) or "")
+                    for name in _SCENARIO_FIELDS
+                    if item.get(name) is not None
+                }
+        return {**value, "scenario_expectations": cleaned}
+
+
+class MainForceBehaviorModelOutput(_BehaviorModelOutput):
     behavior: Literal["建仓", "震仓", "拉升", "出货", "观望", "狩猎止损"]
-    key_evidence: tuple[str, ...] = Field(min_length=1)
 
 
-class RetailBehaviorModelOutput(StrictModelOutput):
+class RetailBehaviorModelOutput(_BehaviorModelOutput):
     behavior: Literal["FOMO追高", "恐慌割肉", "观望", "理性跟随", "底部建仓", "高位减仓"]
-    key_evidence: tuple[str, ...] = Field(min_length=1)
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,6 +120,9 @@ class BehaviorForecast:
     disclaimer: str | None
     routing_config_version: int
     evidence_trace: tuple[EvidenceTrace, ...]
+    scenario_expectations: Mapping[str, ScenarioExpectation] = field(
+        default_factory=dict
+    )
 
 
 class BehaviorForecaster:
@@ -138,6 +192,9 @@ class BehaviorForecaster:
             disclaimer=disclaimer_for_prior_weight(request.prior_weight),
             routing_config_version=self._router.config_version,
             evidence_trace=trace,
+            scenario_expectations=_normalize_scenario_expectations(
+                output.scenario_expectations
+            ),
         )
 
     def _apply_dragon_tiger(
@@ -199,4 +256,50 @@ def _normalize(values: Mapping[str, float]) -> dict[str, float]:
     return {key: value / total for key, value in values.items()}
 
 
-__all__ = ["BehaviorForecast", "BehaviorForecastRequest", "BehaviorForecaster", "EvidenceTrace"]
+# Prompt files label the three scenarios 超预期 / 符合预期 / 低于预期; the response
+# tree names them REQUIRED_SCENARIOS = (超预期强, 符合预期, 低于预期).  A test pins
+# the two in sync so the tendencies cannot silently stop reaching the branches.
+_SCENARIO_ALIASES: dict[str, str] = {
+    "超预期": "超预期强",
+    "符合预期": "符合预期",
+    "低于预期": "低于预期",
+}
+
+
+def _canonical_scenario(label: str) -> str | None:
+    """Map a model-written scenario label onto a branch name, or ``None``."""
+    key = str(label).strip()
+    if not key:
+        return None
+    if key in _SCENARIO_ALIASES:
+        return _SCENARIO_ALIASES[key]
+    for alias, name in _SCENARIO_ALIASES.items():
+        if alias in key:
+            return name
+    return None
+
+
+def _normalize_scenario_expectations(
+    raw: Mapping[str, Any] | None,
+) -> Mapping[str, ScenarioExpectation]:
+    """Key the tendencies by the branch names the response tree uses."""
+    if not isinstance(raw, Mapping):
+        return MappingProxyType({})
+    normalized: dict[str, ScenarioExpectation] = {}
+    for key, item in raw.items():
+        name = _canonical_scenario(key)
+        if name is None or name in normalized or not isinstance(item, ScenarioExpectation):
+            continue
+        normalized[name] = item
+    return MappingProxyType(normalized)
+
+
+__all__ = [
+    "BehaviorForecast",
+    "BehaviorForecastRequest",
+    "BehaviorForecaster",
+    "EvidenceTrace",
+    "MainForceBehaviorModelOutput",
+    "RetailBehaviorModelOutput",
+    "ScenarioExpectation",
+]

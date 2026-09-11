@@ -32,11 +32,37 @@ from src.reasoning.scenario_builder import (
 )
 
 
+_SCENARIO_EXPECTATION_FIELDS = ("trigger", "behavior_shift", "behavior_tendency", "risk")
+
+
+def _scenario_expectations_dict(raw: Any) -> dict[str, dict[str, str]]:
+    """Serialize per-scenario behavior tendencies for the PA scenario page.
+
+    Duck-typed on purpose: the orchestrator only needs the text, so it stays
+    independent of the forecaster's models.
+    """
+    if not isinstance(raw, Mapping):
+        return {}
+    serialized: dict[str, dict[str, str]] = {}
+    for name, item in raw.items():
+        if isinstance(item, Mapping):
+            serialized[str(name)] = {
+                key: str(item.get(key) or "") for key in _SCENARIO_EXPECTATION_FIELDS
+            }
+            continue
+        serialized[str(name)] = {
+            key: str(getattr(item, key, "") or "")
+            for key in _SCENARIO_EXPECTATION_FIELDS
+        }
+    return serialized
+
+
 class ProductionRunStatus(str, Enum):
     EMPTY = "empty"
     LOADING = "loading"
     READY = "ready"
     ERROR = "error"
+
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +107,9 @@ class ProductionAnalysisResult:
                                 "routing_config_version": forecast.routing_config_version,
                                 "key_evidence": list(forecast.key_evidence),
                                 "rejected_model_behavior": forecast.rejected_model_behavior,
+                                "scenario_expectations": _scenario_expectations_dict(
+                                    forecast.scenario_expectations
+                                ),
                             }
                             for participant, forecast in branch.a_class.items()
                         },

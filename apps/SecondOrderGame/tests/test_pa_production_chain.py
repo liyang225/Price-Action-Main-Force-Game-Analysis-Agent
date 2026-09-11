@@ -21,7 +21,7 @@ from src.probability.t1_gate import (
     T1GateResult,
     T1GateStatus,
 )
-from src.reasoning.behavior_forecaster import BehaviorForecast
+from src.reasoning.behavior_forecaster import BehaviorForecast, ScenarioExpectation
 from src.reasoning.cycle_classifier import CycleObservation
 from src.reasoning.scenario_builder import (
     REQUIRED_SCENARIOS,
@@ -120,6 +120,14 @@ class _FakePipeline:
             disclaimer="专家先验推演，非统计估计" if request.prior_weight >= 0.2 else None,
             routing_config_version=1,
             evidence_trace=(),
+            scenario_expectations={
+                "超预期强": ScenarioExpectation(
+                    trigger="新增重磅利好", behavior_tendency="继续借利好派发"
+                ),
+                "低于预期": ScenarioExpectation(
+                    trigger="技术破位", behavior_tendency="偏打压出货"
+                ),
+            },
         )
         scenarios = {
             name: ScenarioInputs(
@@ -175,6 +183,12 @@ def test_production_orchestrator_runs_bridge_gate_and_page_state_with_retry():
     serialized = ready.result.to_dict()
     forecast = serialized["scenario_tree"]["branches"][0]["a_class"]["主力"]
     assert forecast["routing_config_version"] == 1
+    # 三情景行为倾向必须一路走到 PA 能读到的结果里（应对方案页据此显示）。
+    assert set(forecast["scenario_expectations"]) == {"超预期强", "低于预期"}
+    assert (
+        forecast["scenario_expectations"]["低于预期"]["behavior_tendency"]
+        == "偏打压出货"
+    )
     assert serialized["scenario_tree"]["probability_chain"] == context.materials[
         "probability_chain"
     ]
