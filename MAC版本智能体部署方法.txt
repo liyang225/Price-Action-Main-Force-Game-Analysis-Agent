@@ -1,0 +1,790 @@
+================================================================
+  PA Agent 智能体部署方法（Mac 版）
+  适用环境：macOS 12+ (Monterey 及以上) + Python 3.11+ 已安装
+  默认数据源：富途 OpenD（需要用户下载安装并登录，见第四步）
+================================================================
+
+【说明】
+本文档供自动化 Agent 按步骤执行部署。每一步都有明确的命令和验收条件。
+遇到问题时按"故障排查"章节处理。最后必须通过验收环节才能交付给用户。
+
+本次 Mac 部署已把默认数据源改为"富途 OpenD"（Futu OpenD）。富途 OpenD 必须由
+用户从富途官网下载、安装并登录，Agent 负责把下载地址发给用户、指导安装登录，
+并用第四步、第七步的命令完成验收。
+
+【重要：Mac 与 Windows 的核心差异】
+1. MT5（MetaTrader 5）没有 macOS 原生版本，Mac 版默认使用"富途 OpenD"作为数据源
+2. 富途 OpenD 是富途官方提供的本地行情网关（官方支持 macOS），PA Agent 通过
+   futu-api 连接本机 OpenD（默认 127.0.0.1:11111）读取 K 线
+3. Mac 上 PA Agent 不会自动启动 OpenD（自动启动仅 Windows 支持），必须先手动
+   打开 OpenD 并完成登录，程序才能取到数据
+4. pywin32 / MetaTrader5 包不支持 macOS，无需安装
+5. 不需要 bat 文件，Mac 用 .command 文件（双击即可运行）
+6. pyproject.toml 中 MetaTrader5 和 pywin32 标记了 sys_platform == 'win32'，
+   macOS 下 pip 会自动跳过；futu-api 无平台限制，macOS 下会自动安装
+7. 项目代码已做了平台兼容：数据源通过 factory.py 工厂创建，Mac 下默认使用 Futu（OpenD）
+
+【重要：富途 OpenD 官网下载地址（必须发给用户，让用户自己下载安装）】
+
+  https://support.futunn.com/topic464?lang=zh-cn&from_platform=1
+
+- 这是富途官方"Futu OpenD / Futu API 下载"页，提供 Windows / MacOS / CentOS / Ubuntu 版本
+- Mac 用户请在该页面选择 MacOS 版下载（可视化 OpenD）
+- 官方直链（自动指向最新版；用户若找不到按钮可直接用）：
+    https://www.futunn.com/download/fetch-lasted-link?name=opend-macos
+- 只从富途官网下载，不要使用第三方下载站 / 网盘里的安装包
+- 富途 OpenD 不需要 API Key，但需要一个富途账号（牛牛号 / 邮箱 / 手机号）登录
+
+【重要：项目路径】
+本文档中 PROJECT_ROOT 代表 PA_Agent 项目的根目录。
+执行前必须先确定项目实际路径，后续所有命令中的 PROJECT_ROOT 都替换为实际路径。
+例如：用户项目在 ~/Desktop/PA_Agent，则 PROJECT_ROOT = ~/Desktop/PA_Agent
+      用户项目在 /Users/张三/Projects/PA_Agent，则 PROJECT_ROOT = /Users/张三/Projects/PA_Agent
+
+确定方法：找到项目中存在 pa_agent/main.py 和 pyproject.toml 的那个目录，就是 PROJECT_ROOT。
+
+【重要：不使用虚拟环境】
+本方案直接将依赖安装到系统 Python，不创建虚拟环境。
+原因：用户双击 .command 文件运行程序，虚拟环境会增加不必要的复杂度和闪退风险。
+只要系统 Python 是专门给本程序用的，就不会有冲突问题。
+
+【重要：Shell 说明】
+本文档所有命令均使用 bash/zsh 语法（macOS 默认终端）。
+
+================================================================
+  第零步：确认当前系统是 macOS
+================================================================
+
+执行以下命令：
+
+  uname -s
+
+预期输出：Darwin
+
+若输出不是 Darwin，说明当前不是 macOS，请使用 Windows 版部署文档。
+
+================================================================
+  第一步：确认前置条件
+================================================================
+
+执行以下命令，确认 Python 已就绪：
+
+  python3 --version
+
+预期输出：Python 3.11.x 或更高版本（3.12、3.13 均可）
+
+若输出"command not found: python3"，说明 Python 未安装。
+解决方法：
+
+  方案 A — 官方安装包（推荐）：
+    访问 https://www.python.org/downloads/ 下载 Python 3.11+ 安装包
+    安装时勾选"Install for all users"
+
+  方案 B — Homebrew：
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    brew install python@3.13
+
+若 python3 存在但 python 不存在，创建软链接：
+  sudo ln -sf $(which python3) /usr/local/bin/python
+
+================================================================
+  第二步：升级 pip
+================================================================
+
+  python3 -m pip install --upgrade pip -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn
+
+验收：
+
+  python3 -c "import pip; print(pip.__version__)"
+
+预期输出：pip 版本号 24.x 或更高
+
+【故障排查】
+- 若 pip 升级网络超时，换阿里云源：
+    python3 -m pip install --upgrade pip -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com
+
+================================================================
+  第三步：安装项目依赖
+================================================================
+
+  cd PROJECT_ROOT
+  pip3 install -e . -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn
+
+说明：
+- -e . 表示以开发模式安装，代码改动即时生效
+- -i 指定清华源，避免默认源网络问题
+- macOS 下 pip 会自动跳过 pyproject.toml 中标记 sys_platform == 'win32' 的包：
+  MetaTrader5、pywin32（这两个包不支持 macOS，不需要安装）
+- 实际安装的依赖：PyQt6, pyqtgraph, numpy, pandas, openai, tiktoken,
+  jsonschema, pydantic, tvDatafeed, cryptography, akshare, baostock,
+  curl_cffi, tushare, futu-api, cursor-sdk
+
+  注意 1：futu-api 是富途 OpenD 数据源的核心依赖（富途官方 Python SDK），
+  macOS 下会自动安装，无需另行处理。
+  futu-api 依赖 protobuf 3.x，pip 安装时可能自动降级 protobuf，属正常现象。
+
+  注意 2：tvDatafeed 是 TradingView 备选数据源的核心依赖，
+  从 GitHub 安装（git+https），网络环境需能访问 GitHub。
+
+验收：逐个检查核心包是否可导入
+
+  python3 -c "import PyQt6; print('PyQt6 OK')"
+  python3 -c "import pyqtgraph; print('pyqtgraph OK')"
+  python3 -c "import numpy; print('numpy OK')"
+  python3 -c "import pandas; print('pandas OK')"
+  python3 -c "import openai; print('openai OK')"
+  python3 -c "import tiktoken; print('tiktoken OK')"
+  python3 -c "import jsonschema; print('jsonschema OK')"
+  python3 -c "import pydantic; print('pydantic OK')"
+  python3 -c "import cryptography; print('cryptography OK')"
+  python3 -c "from tvDatafeed import TvDatafeed; print('tvDatafeed OK')"
+  python3 -c "import akshare; print('akshare OK')"
+  python3 -c "import baostock; print('baostock OK')"
+  python3 -c "import curl_cffi; print('curl_cffi OK')"
+  python3 -c "import futu; print('futu-api OK')"
+
+预期输出：每行均显示 "xxx OK"（共 14 个）
+
+注意：Mac 上不需要检查 MetaTrader5 和 win32crypt。
+
+【故障排查】
+
+问题 1：pip install 网络超时 / ConnectionError
+解决：
+  方案 A - 换清华源（已在上面命令中使用）：
+    pip3 install -e . -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn
+
+  方案 B - 换阿里云源：
+    pip3 install -e . -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com
+
+  方案 C - 逐个安装（某个包卡住时单独装）：
+    pip3 install PyQt6 -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn
+    pip3 install pyqtgraph -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn
+    ... 依次安装每个包
+
+问题 2：PyQt6 安装后报 "DLL load failed" 或 import 失败
+解决：
+  macOS 上 PyQt6 依赖较新版本的 macOS 和 OpenGL：
+  - 确认 macOS 版本 >= 12.0 (Monterey)
+  - 若使用 Homebrew Python，尝试：
+    brew reinstall python@3.13
+    pip3 install --force-reinstall PyQt6
+  - 若仍然失败，安装 Qt 依赖：
+    brew install qt
+
+问题 3：tvDatafeed 安装失败（git clone 超时 / 网络不可达）
+说明：tvDatafeed 是 TradingView 备选数据源的核心依赖，
+  从 GitHub 安装（git+https://github.com/rongardF/tvdatafeed.git），
+  国内网络可能无法直接克隆。只使用富途 OpenD 时这个问题不影响部署。
+解决：
+  方案 A — 配置 git 代理（如果已有代理）：
+    git config --global http.proxy http://127.0.0.1:7890
+    git config --global https.proxy http://127.0.0.1:7890
+    pip3 install git+https://github.com/rongardF/tvdatafeed.git
+
+  方案 B — 手动下载 + 本地安装：
+    浏览器打开 https://github.com/rongardF/tvdatafeed
+    → Code → Download ZIP → 解压到本地
+    → cd 到解压目录 → pip3 install .
+
+  方案 C — 使用 gitee 镜像（如存在）：
+    搜索 gitee 上是否有 tvdatafeed 镜像仓库，克隆后用 pip3 install . 安装。
+
+问题 3.5：tvDatafeed 安装后，TradingView 数据拉取全部报 "Connection to remote host was lost"
+原因：tvDatafeed 2.1.0 存在一个已知 bug —— 其 WebSocket headers 参数传的是 JSON 字符串
+  而非 Python dict，导致 websocket-client ≥1.8 版本拒绝握手（HTTP 400）。
+解决：找到 tvDatafeed 安装目录下的 main.py，修改一行代码。
+
+  定位文件：
+    python3 -c "import tvDatafeed; import os; print(os.path.dirname(tvDatafeed.__file__))"
+  输出类似：/opt/homebrew/lib/python3.13/site-packages/tvDatafeed
+
+  编辑该目录下的 main.py，找到第 35 行附近的：
+    __ws_headers = json.dumps({"Origin": "https://data.tradingview.com"})
+  改为：
+    __ws_headers = {"Origin": "https://data.tradingview.com"}
+
+  改完后验证（使用 daily interval，避免分钟线超时干扰验证结果）：
+    python3 -c "from tvDatafeed import TvDatafeed, Interval; df = TvDatafeed().get_hist('XAUUSD', 'OANDA', Interval.in_daily, n_bars=2); print('OK:', len(df), 'bars')"
+  预期输出：OK: 2 bars
+
+  说明：此 bug 仅在 websocket-client ≥1.8 时触发。如果你用的是旧版 websocket-client，
+  可能不受影响，但建议一并修复以兼容未来升级。
+
+问题 3.6：tvDatafeed 安装后数据拉取变慢，切换品种/周期要等 40 秒甚至更久
+原因：tvDatafeed 2.1.0 的 get_hist() 在每次调用时都会新建 WebSocket 连接，但从不关闭
+  上一个连接——持续使用会积累大量半开放连接，触发 TradingView 速率限制。
+  PA_Agent 项目已在 pa_agent/data/tradingview.py 中对此进行修复（无需改 tvDatafeed 源码）：
+  1. 每次 get_hist() 调用完成后自动关闭 socket，不再泄漏连接
+  2. 切换品种/周期时主动关闭当前 socket，立即中断挂起的请求（不再排队等超时）
+  3. 单次请求超时从 15 秒缩短至 10 秒，且不再自动重试（避免超时翻倍）
+  这些修复已包含在项目代码中，pip install -e . 后即生效，无需额外操作。
+
+  注意：即使有上述修复，TradingView 匿名（nologin）模式下仍受 IP 速率限制。
+  若经常拉取失败，最有效的解决方案是在 GUI 设置中填入 TradingView 账号用于登录。
+
+问题 4：pyqtgraph 与 PyQt6 版本不兼容
+解决：指定兼容版本：
+    pip3 install pyqtgraph>=0.13 -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn
+
+问题 5：numpy 版本冲突
+解决：
+    pip3 install numpy>=1.26 -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn
+
+问题 6：macOS 上 PyQt6 窗口无法显示 / 黑屏
+解决：
+  - 确认没有设置 QT_QPA_PLATFORM 环境变量（macOS 上不需要）
+  - 若通过 SSH 远程运行，需要 X11 转发或 VNC，不支持 headless
+  - 若使用 macOS 安全策略阻止了 Python 打开窗口：
+    系统偏好设置 → 安全性与隐私 → 允许从以下位置下载的 App → 允许 Python
+
+问题 7：futu-api 安装失败 / import futu 报错
+解决：
+  - 单独安装（指定清华源）：
+    pip3 install futu-api -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn
+  - 若报 protobuf 版本冲突（其他包要求 protobuf 4.x/5.x）：
+    futu-api 需要 protobuf 3.x，属正常依赖；先满足 futu-api：
+    pip3 install "protobuf<4" futu-api
+  - 若报编译 / 找不到轮子，先按第二步升级 pip 后重试
+
+问题 8：import futu 成功但连接报版本不匹配
+解决：OpenD 与 futu-api 版本尽量配套（都用最新版）：
+    pip3 install --upgrade futu-api
+  同时按第四步重新下载最新版 OpenD。
+
+================================================================
+  第四步：安装并登录富途 OpenD（需要用户配合，务必耐心引导）
+================================================================
+
+本步骤需要用户在自己的 Mac 上操作（下载、安装、登录）。Agent 的职责：
+  1) 把富途官网下载地址发给用户，并说明要下载 MacOS 版（可视化 OpenD）
+  2) 指导用户安装、处理 macOS 安全拦截、完成登录
+  3) 用命令验收 OpenD 是否已启动并登录成功
+
+4.1 把下载地址发给用户（必须用官网）
+
+  官网下载页（把这个链接发给用户）：
+    https://support.futunn.com/topic464?lang=zh-cn&from_platform=1
+  → 打开后在页面中选择 MacOS 版 OpenD 下载（可视化 OpenD）
+
+  官方直链（自动指向最新版，用户找不到按钮时可用）：
+    https://www.futunn.com/download/fetch-lasted-link?name=opend-macos
+
+  提醒用户：
+  - 只从富途官网下载，不要使用第三方来源的安装包
+  - 下载到"下载 / Downloads"目录即可，安装包是一个压缩包
+
+4.2 安装（可视化 OpenD）
+
+  - 解压下载得到的压缩包，得到 .dmg 安装镜像
+  - 双击 .dmg，把 "Futu_OpenD"（可视化 OpenD）拖入"应用程序 / Applications"
+  - 安装完成后推出（卸载）该磁盘镜像
+
+  macOS 首次打开被安全策略拦截时的处理：
+  - 提示"无法验证开发者 / 来自身份不明的开发者"：
+    右键（或 Control+点击）应用图标 → 打开 → 在弹窗中点"打开"
+    或：系统设置 → 隐私与安全性 → 找到被拦截的提示 → 点"仍要打开"
+  - 提示"已损坏，无法打开"（网络下载文件被加了隔离属性）：
+    终端执行（应用名以 /Applications 下实际名称为准，可先 ls /Applications 查看）：
+      xattr -dr com.apple.quarantine "/Applications/Futu_OpenD.app"
+    然后重新右键 → 打开
+
+  说明：本方案要求使用"可视化 OpenD"（带图形界面，可登录、可改端口）。
+  命令行版（FutuOpenD，无图形界面）在 macOS 上有已知问题：OpenD.app 运行时会被
+  系统分配到随机路径，导致读不到同目录的 FutuOpenD.xml 配置，需要执行解压包中的
+  fixrun.sh，或用 -cfg_file 指定配置文件的绝对路径。除用户明确要求挂机场景外，
+  不要引导用户使用命令行版。
+
+4.3 启动并登录 OpenD
+
+  1) 在"应用程序"中打开 Futu_OpenD
+  2) 确认界面右侧的启动配置（默认值即与本程序一致）：
+       监听地址：127.0.0.1
+       API 端口：11111
+     若用户改过端口，请记下实际端口，稍后在 PA Agent 设置里填相同端口
+  3) 输入富途账号（牛牛号 / 邮箱 / 手机号）与密码，点击登录
+     - 手机号登录时按提示填写国家/地区代码
+     - 首次登录需要先完成"问卷评估与协议确认"，完成后重新登录即可
+  4) 登录成功后界面会显示账号信息与"行情权限"
+
+4.4 验收：确认 OpenD 已在监听、SDK 能连上（Agent 执行）
+
+  lsof -nP -iTCP:11111 -sTCP:LISTEN
+
+  预期输出：有进程（Futu_OpenD 相关）在 11111 端口 LISTEN。
+  若无任何输出，说明 OpenD 未启动或端口不一致，见故障排查 4.1。
+
+  再确认 Python SDK 能连上 OpenD 并已登录行情：
+
+  python3 -c "
+from futu import OpenQuoteContext
+ctx = OpenQuoteContext(host='127.0.0.1', port=11111)
+ret, data = ctx.get_global_state()
+print('ret =', ret)
+print('data =', data)
+ctx.close()
+"
+
+  预期：ret = 0（RET_OK），data 中 qot_logined 为 True（行情已登录）。
+  若报 "No module named 'futu'"，回第三步安装 futu-api。
+  若提示连接失败，回 4.3 确认 OpenD 已启动并登录。
+
+4.5 注意事项
+
+  - OpenD 必须先启动并登录，PA Agent 才能取到数据；程序运行期间请保持 OpenD 开启
+  - 即使 OpenD 没启动，PA Agent 也能正常打开（只会在日志里记一条警告），但界面上
+    拉不到任何 K 线，所以务必先完成本步骤再进入第七步验收
+  - 本部署只需要 OpenD 的"行情"能力，不需要做交易解锁，也不要引导用户配置交易相关项
+  - 行情权限：某个市场没有权限时，该市场的 K 线会拉取失败（报订阅 / 权限错误）。
+    行情权限可在 OpenD 界面查看，官方说明：
+    https://openapi.futunn.com/futu-api-doc/intro/authority.html
+  - 验收建议使用有权限的市场品种，例如 A 股 SH.600519、港股 HK.00700、美股 US.AAPL
+
+【故障排查】
+
+问题 4.1：lsof 没有输出 / 连接被拒绝（Connection refused）
+原因：OpenD 未启动，或端口不是 11111，或监听地址被改
+解决：
+  1) 确认 Futu_OpenD 正在运行（Dock 中有图标、窗口未关闭）
+  2) 确认 OpenD 界面右侧"API 端口"是 11111、"监听地址"是 127.0.0.1
+  3) 若用户改过端口，把 PA Agent 的端口改成一致：
+     GUI 设置页 → Futu OpenD → 主机 / 端口
+     （对应 config/settings.json 中的 futu.opend_host / futu.opend_port）
+  4) 重新执行 lsof 命令确认监听成功
+
+问题 4.2：报错"未安装 futu-api。请使用项目环境执行: pip install futu-api"
+解决：
+  pip3 install futu-api -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn
+
+问题 4.3：报错"无法连接富途 OpenD (127.0.0.1:11111)：…。请启动并登录 OpenD。"
+解决：按 4.3 启动并登录 OpenD，然后重新验收（4.4）
+
+问题 4.4：OpenD 已启动但拉不到数据（订阅失败 / 无权限 / 返回错误）
+原因：行情权限不足；OpenD 未登录行情；或账号行情权限被其他设备抢占
+解决：
+  1) 在 OpenD 界面确认已登录，且能看到"行情权限"
+  2) 换一个有权限的品种测试：SH.600519（A股）/ HK.00700（港股）/ US.AAPL（美股）
+  3) 富途对同一账号的行情权限有抢占机制：若账号在手机 / 牛牛客户端被顶号登录，
+     OpenD 会掉线，请重新登录并保持 OpenD 独占行情
+
+问题 4.5：macOS 提示"无法验证开发者""来自身份不明的开发者""已损坏，无法打开"
+解决：
+  右键（Control+点击）应用 → 打开 → 打开
+  若提示已损坏：
+    xattr -dr com.apple.quarantine "/Applications/Futu_OpenD.app"
+  （应用名以 /Applications 下的实际名称为准）
+
+问题 4.6：端口 11111 被占用
+解决：
+  lsof -nP -iTCP:11111 -sTCP:LISTEN     # 查看占用进程
+  在 OpenD 界面把 API 端口改成其他值（如 11112），并在 PA Agent 设置里填相同端口
+
+问题 4.7：OpenD 一直提示登录失败 / 未登录
+解决：
+  - 手机号登录需要国家/地区代码（如 +86）
+  - 首次登录需先完成问卷评估与协议确认，完成后重新登录
+  - 确认账号密码正确，且账号未被其他设备顶号
+
+问题 4.8：用户不想安装 OpenD
+解决：可以不装，但默认数据源需要相应改回 TradingView（TradingView 无需本地网关，
+  但国内直连可能不稳定、匿名模式有限流）。做法：跳过第四步，并把第五步中
+  factory.py / settings.py 的默认值改为 "tradingview"、last_symbol 改为 "XAUUSD"，
+  然后按"附：TradingView 备选数据源使用说明"和第三步问题 3.5 / 3.6 处理。
+
+================================================================
+  第五步：修改项目代码，使 Mac 默认使用富途 OpenD
+================================================================
+
+Mac 版需要修改以下文件，使程序默认使用"富途 OpenD"数据源而非 MT5。
+
+5.1 修改 pyproject.toml — 无需修改
+  pyproject.toml 中 MetaTrader5 和 pywin32 已标记 sys_platform == 'win32'，
+  macOS 下 pip install -e . 会自动跳过这两个包；futu-api 已在依赖列表中，
+  macOS 下会自动安装。无需手动修改。
+
+5.2 修改 pa_agent/data/factory.py — 关键修改
+  将 normalize_data_source_kind() 的默认返回值从 "mt5" 改为 "futu"，
+  以及 DATA_SOURCE_CHOICES 的顺序调整为 Futu 在前。
+
+  编辑 PROJECT_ROOT/pa_agent/data/factory.py：
+
+  找到：
+    DATA_SOURCE_CHOICES: tuple[tuple[DataSourceKind, str], ...] = (
+        ("mt5", "MT5"),
+        ("tradingview", "TradingView"),
+        ("futu", "Futu"),
+    )
+
+  改为：
+    DATA_SOURCE_CHOICES: tuple[tuple[DataSourceKind, str], ...] = (
+        ("futu", "Futu"),
+        ("tradingview", "TradingView"),
+        ("mt5", "MT5"),
+    )
+
+  找到 normalize_data_source_kind 函数中的：
+    return "mt5"
+
+  改为：
+    return "futu"
+
+5.3 修改 pa_agent/config/settings.py — 关键修改
+  将 GeneralSettings 中 last_data_source 的默认值从 "mt5" 改为 "futu"。
+
+  编辑 PROJECT_ROOT/pa_agent/config/settings.py：
+
+  找到：
+    last_data_source: DataSourceKind = "mt5"
+
+  改为：
+    last_data_source: DataSourceKind = "futu"
+
+  同时把默认品种改成富途代码格式（"市场.代码"）：
+
+  找到：
+    last_symbol: str = "XAUUSDm"
+
+  改为：
+    last_symbol: str = "SH.600519"
+
+  （注意：富途代码必须带市场前缀，形如 SH.600519 / SZ.000001 / HK.00700 / US.AAPL；
+   不能沿用 MT5 的 XAUUSDm 这类写法，否则程序会报"富途代码无效"）
+
+5.4 UI 提示文本 — 通常无需修改
+  pa_agent/gui/main_window.py 中富途的输入提示已经是：
+    "富途代码：SH.600519、HK.00700 或 US.AAPL；A股可输入 600519"
+  数据源下拉框中富途的标签为 "Futu"（factory.py 的 DATA_SOURCE_CHOICES）。
+  若希望界面显示"富途 OpenD"，可把该标签改为 "富途 OpenD"（可选，不影响功能）。
+
+5.5 清理旧配置（重要，容易漏）
+  若 PROJECT_ROOT/config/settings.json 已存在（例如用户之前用 MT5 或 TradingView
+  启动过），其中的 last_data_source / last_symbol 会覆盖上面改的默认值，必须处理：
+
+    rm -f "PROJECT_ROOT/config/settings.json"
+
+  程序下次启动会自动生成新的默认配置。
+  若用户已经填好 API Key 不想丢，则改为手工编辑该文件：
+    general.last_data_source 改为 "futu"
+    general.last_symbol 改为 "SH.600519"
+  否则程序会带着旧品种启动，界面上会报"富途代码无效"（见故障排查 5.1）。
+
+5.6 确认项目目录结构完整性
+
+  cd PROJECT_ROOT
+  test -f pa_agent/main.py && echo "main.py OK" || echo "main.py MISSING"
+  test -f pa_agent/gui/main_window.py && echo "main_window.py OK" || echo "main_window.py MISSING"
+  test -d prompt_engineering && echo "prompt_engineering OK" || echo "prompt_engineering MISSING"
+
+  预期输出：三条 OK
+
+【故障排查】
+
+问题 5.1：程序提示"富途代码无效，请输入如 SH.600519、HK.00700 或 US.AAPL"
+原因：config/settings.json 中残留了旧数据源的品种（如 XAUUSDm）
+解决：见 5.5，删除 settings.json，或在 GUI 中把品种改成 SH.600519 后保存
+
+问题 5.2：数据源下拉框默认不是 Futu
+原因：settings.json 里 last_data_source 仍是旧值 "mt5" / "tradingview"
+解决：见 5.5；或直接在界面下拉框中选择 Futu
+
+问题 5.3：程序能打开但一直取不到数据
+原因：OpenD 未启动 / 未登录，或端口不一致
+解决：见第四步故障排查 4.1 / 4.3 / 4.4
+
+================================================================
+  第六步：生成运行智能体.command 到项目根目录
+================================================================
+
+在 PROJECT_ROOT 目录下生成"运行智能体.command"文件。
+.command 文件是 macOS 双击即可运行的脚本文件，必须放在项目根目录（与 run.py 同级）。
+
+执行以下命令生成：
+
+  cat > "PROJECT_ROOT/运行智能体.command" << 'EOF'
+#!/bin/bash
+cd "$(dirname "$0")"
+python3 run.py
+if [ $? -ne 0 ]; then
+    echo ""
+    echo "[错误] 程序异常退出，请查看上方错误信息。"
+    echo "按回车键关闭窗口..."
+    read
+fi
+EOF
+  chmod +x "PROJECT_ROOT/运行智能体.command"
+
+说明：
+- cd "$(dirname "$0")" 会自动切换到 .command 文件自身所在的目录
+- 无论用户把项目放在哪个路径，只要 .command 在项目根目录就能正确运行
+- 不需要激活虚拟环境，因为依赖直接装在系统 Python 中
+- chmod +x 使 .command 文件可执行
+- macOS 首次双击 .command 文件可能会提示"无法验证开发者"：
+  右键 → 打开 → 仍要打开（或者：系统偏好设置 → 安全性与隐私 → 允许）
+- 提醒用户：运行本程序前请先启动并登录富途 OpenD（双击运行不会自动启动 OpenD）
+
+验收：确认文件已生成且内容正确
+
+  test -f "PROJECT_ROOT/运行智能体.command" && echo "File exists" || echo "File missing"
+  test -x "PROJECT_ROOT/运行智能体.command" && echo "Executable" || echo "Not executable"
+  cat "PROJECT_ROOT/运行智能体.command"
+
+预期输出：
+- File exists
+- Executable
+- 显示上述 .command 文件完整内容
+
+【故障排查】
+- 若双击 .command 文件提示"无法验证开发者"：
+  右键点击 .command 文件 → 打开 → 仍要打开
+  或终端执行：xattr -d com.apple.quarantine "PROJECT_ROOT/运行智能体.command"
+- 若双击闪退：终端中手动运行观察输出：
+  bash "PROJECT_ROOT/运行智能体.command"
+
+================================================================
+  第七步：验收 — 运行程序并确认无错误
+================================================================
+
+验收流程（必须全部通过才能交付）：
+
+7.1 检查依赖完整性
+
+  cd PROJECT_ROOT
+  python3 -c "from pa_agent.main import main; print('Import OK')"
+
+预期输出：Import OK
+若失败：依赖未安装完整，回到第三步重新安装
+
+7.2 富途 OpenD 连通性与 K 线验收（关键）
+
+  先确认 OpenD 在监听（第四步 4.4 的命令再执行一次）：
+
+    lsof -nP -iTCP:11111 -sTCP:LISTEN
+
+  再用项目自身的富途数据源拉两根 K 线（这是程序真实使用的代码路径）：
+
+    cd PROJECT_ROOT
+    python3 -c "
+from pa_agent.config.paths import SETTINGS_JSON_PATH
+from pa_agent.config.settings import load_settings
+from pa_agent.data.futu_source import FutuSource
+src = FutuSource(settings=load_settings(SETTINGS_JSON_PATH))
+src.connect()
+src.subscribe('SH.600519', '1d')
+bars = src.latest_snapshot(2)
+print('FUTU OK:', len(bars), 'bars', bars[0].close)
+src.disconnect()
+"
+
+  预期输出：FUTU OK: 2 bars <某个价格>
+  若失败，按报错对照第四步故障排查处理
+  （OpenD 未启动 4.1、未安装 futu-api 4.2、未登录 4.3、无行情权限 4.4）。
+
+7.3 启动程序（命令行方式，确认能正常初始化）
+
+  cd PROJECT_ROOT
+  python3 run.py
+
+验收标准：
+- 程序窗口成功弹出（PyQt6 GUI 窗口出现）
+- 窗口标题显示 "PA Agent"
+- 控制台无 ImportError / ModuleNotFoundError 等致命错误
+- 数据源默认显示为 Futu（富途 OpenD），而非 MT5 / TradingView
+
+若窗口正常弹出，关闭窗口即可（点 X 退出）。
+
+7.4 双击 .command 文件验收
+
+  open "PROJECT_ROOT/运行智能体.command"
+
+验收标准：同 7.3，窗口正常弹出且无致命错误
+
+7.5 最终验收清单
+
+  [ ] python3 --version 输出 3.11+
+  [ ] 所有核心包导入测试通过（14 个 OK，含 futu-api；不含 MetaTrader5 和 pywin32）
+  [ ] 富途 OpenD 已安装、已启动、已登录：
+      lsof -nP -iTCP:11111 -sTCP:LISTEN 有输出（LISTEN）
+  [ ] 富途 K 线验收通过：7.2 输出 FUTU OK: 2 bars …（若失败，见第四步故障排查）
+  [ ] python3 -c "from pa_agent.main import main; print('Import OK')" 输出 Import OK
+  [ ] python3 run.py 窗口正常弹出
+  [ ] 运行智能体.command 双击窗口正常弹出
+  [ ] 控制台无 ImportError / ModuleNotFoundError
+  [ ] 数据源默认为 Futu（富途 OpenD），非 MT5 / TradingView
+
+全部通过 → 部署成功，可交付用户。
+任一项失败 → 根据错误信息对照故障排查章节修复后重新验收。
+
+================================================================
+  附：配置 API Key 与 OpenD 参数（用户首次使用时需操作）
+================================================================
+
+程序启动后，在 GUI 界面中点击"设置"按钮：
+- Base URL 默认已为 https://api.deepseek.com（DeepSeek 官方接口，一般无需修改）
+- 填入 DeepSeek API Key（在 https://platform.deepseek.com 申请）
+- 模型默认已为 deepseek-v4-flash（可按需改为 deepseek-v4-pro 等）
+- 同一设置页中有"Futu OpenD"分组：
+    主机 默认 127.0.0.1，端口 默认 11111（与 OpenD 界面保持一致即可）
+- 点击保存
+
+API Key 会被存储在 config/settings.json 中。
+
+================================================================
+  附：富途 OpenD 数据源使用说明（Mac 默认数据源）
+================================================================
+
+1. 前置条件
+   富途 OpenD 必须先启动并完成登录，且在本程序运行期间保持开启。
+   Mac 上 PA Agent 不会自动启动 OpenD（自动启动仅 Windows 支持）。
+   下载地址（官网）：
+   https://support.futunn.com/topic464?lang=zh-cn&from_platform=1
+
+2. 连接参数
+   默认连接 127.0.0.1:11111（与 OpenD 可视化界面右侧的"监听地址/API 端口"一致）。
+   如需修改：GUI 设置页 → Futu OpenD → 主机 / 端口，
+   或直接改 config/settings.json 中的 futu.opend_host / futu.opend_port。
+
+3. 品种代码格式（富途代码 = 市场.代码）
+   - A 股：SH.600519（贵州茅台）、SZ.000001（平安银行）、BJ.xxxxxx
+   - 港股：HK.00700（腾讯控股）
+   - 美股：US.AAPL
+   - A 股也可以只输入 6 位数字（如 600519），程序会自动补全为 SH.600519；
+     若补全的市场不对，用输入框左侧的交易所下拉框指定 SH / SZ
+   - 输入框右侧的"?"按钮有代码格式帮助
+
+4. 支持的周期
+   1m / 3m / 5m / 10m / 15m / 30m / 1h / 2h / 3h / 4h / 1d / 1w / 1M
+
+5. "获取数据"按钮
+   富途数据源不会在启动时自动拉取数据。
+   需手动点击工具栏中的"获取数据"按钮，之后会进入持续刷新模式。
+   切换品种或周期后，RefreshLoop 会在下一个 tick 自动使用新的品种/周期拉取，
+   无需再次点击"获取数据"按钮。
+
+6. 刷新间隔
+   设置页"刷新间隔(毫秒)"（refresh_interval_ms）默认 1000ms。
+   富途数据来自本机 OpenD，不像 TradingView 匿名模式那样有 IP 限流，
+   但建议不要低于 1000ms，以免无谓占用行情订阅额度。
+
+7. 切换品种有 1 分钟最小订阅间隔
+   富途要求同一合约的 K 线订阅至少保持 60 秒才能退订。
+   程序已做延后退订处理：快速来回切换品种/周期时，页面上可能短暂没有数据，
+   属于正常现象，稍等即可恢复。
+
+8. 行情权限
+   没有权限的市场/品类，K 线拉取会失败并给出具体错误。
+   行情权限可在 OpenD 界面查看，官方说明：
+   https://openapi.futunn.com/futu-api-doc/intro/authority.html
+
+9. 首次取数可能较慢
+   OpenD 首次连接、首次订阅某市场行情时会做一次初始化，稍等几秒属正常。
+
+10. 内嵌"二阶博弈"模块
+   "二阶博弈 → 设置"中的市场数据源默认就是"Futu OpenD（默认）"，
+   使用同一组 OpenD 主机/端口；其板块查询需要填写富途返回的板块代码。
+
+================================================================
+  附：TradingView 备选数据源使用说明
+================================================================
+
+说明：Mac 版默认数据源已改为富途 OpenD。如需改用 TradingView（不依赖本地网关，
+但国内直连可能不稳定、匿名模式有限流），在界面数据源下拉框中切换到 TradingView，
+或把 config/settings.json 的 general.last_data_source 改为 "tradingview" 后重启。
+
+1. 刷新间隔设置
+   在 GUI 设置页面中可配置"刷新间隔(毫秒)"（refresh_interval_ms），默认 1000ms。
+   该值在 TradingView 数据源下同样生效，但注意：TradingView nologin 模式
+   对高频请求有限流，建议日线设 3000-5000ms，分钟线可设 1000-2000ms。
+   PA_Agent 内置了防重叠调用和指数退避机制，连续失败时会自动延长等待时间。
+
+2. "获取数据"按钮
+   TradingView 数据源不会在启动时自动拉取数据。
+   需手动点击工具栏中的"获取数据"按钮，之后会进入持续刷新模式。
+   切换品种或周期后，RefreshLoop 会在下一个 tick 自动使用新的品种/周期拉取，
+   无需再次点击"获取数据"按钮——切换会立即中断当前挂起的请求，
+   而不是等上一个请求的超时周期结束。
+
+3. 交易所选择
+   下拉框中的交易所已按类别标注（如 SSE（A股）、HKEX（港股）、BINANCE 等），
+   加密类交易所无后缀标注。
+   不确定交易所时可选择"（自动）"，程序会自动探测。
+
+4. 匿名模式限速说明
+   未配置 TradingView 账号时使用匿名（nologin）模式，TradingView 会对匿名 IP
+   施加请求限制，尤其是小周期（1m、5m）拉取更容易触发。
+   若频繁出现超时，最有效的解决方案是在设置界面填入 TradingView 账号：
+   设置 → TradingView → 用户名 / 密码（凭证加密存储，不会明文保存）。
+
+================================================================
+  附：Mac 特有问题
+================================================================
+
+Q: macOS 上没有 MT5，怎么办？
+A: Mac 版不使用 MT5，默认使用富途 OpenD 作为数据源（富途官方本地行情网关，
+   Mac 原生支持），覆盖 A 股、港股、美股等市场。
+   也可以切换到 TradingView（备选数据源）。
+   如果必须使用 MT5，可以通过虚拟机（Parallels Desktop / VMware Fusion）运行 Windows。
+
+Q: 富途 OpenD 是什么？必须装吗？
+A: 是富途官方提供的本地行情网关。Mac 版默认数据源就是它，所以必须由用户先安装、
+   启动并登录，程序才能取到 K 线。只能从富途官网下载：
+   https://support.futunn.com/topic464?lang=zh-cn&from_platform=1
+   如果用户不愿意安装，可改用 TradingView 数据源（见第五步故障排查 4.8）。
+
+Q: 富途 OpenD 提示"无法验证开发者"或"已损坏，无法打开"
+A: 右键（Control+点击）应用 → 打开 → 打开；
+   若提示已损坏，先去掉隔离属性再打开：
+   xattr -dr com.apple.quarantine "/Applications/Futu_OpenD.app"
+
+Q: OpenD 显示已登录，但程序里拉不到数据
+A: 按顺序检查：
+   1. lsof -nP -iTCP:11111 -sTCP:LISTEN 确认 OpenD 在监听，端口与程序设置一致
+   2. OpenD 界面确认已登录、且该市场有行情权限（换 SH.600519 / HK.00700 / US.AAPL 试）
+   3. 品种代码格式是否为"市场.代码"（如 SH.600519），不要用 MT5 的 XAUUSDm
+   4. 确认已点击工具栏"获取数据"按钮（富途数据源启动时不自动拉取）
+   5. 账号是否被其他设备顶号（富途行情权限有抢占机制）
+
+Q: macOS 上 PyQt6 窗口字体模糊
+A: 如果使用 Retina 显示器，PyQt6 通常会自动适配。若仍然模糊：
+   在终端运行前设置环境变量：
+   export QT_SCALE_FACTOR=1
+   python3 run.py
+
+Q: macOS 上双击 .command 文件提示权限被拒绝
+A: 终端执行：
+   chmod +x "PROJECT_ROOT/运行智能体.command"
+   若提示"无法验证开发者"：
+   xattr -d com.apple.quarantine "PROJECT_ROOT/运行智能体.command"
+
+Q: macOS 上 Python 路径问题（python vs python3）
+A: macOS 自带 Python 2（python 命令），安装 Python 3 后命令为 python3。
+   run.py 中使用的是 sys.executable，会自动使用正确的 Python。
+   .command 文件中写的是 python3 run.py，确保调用 Python 3。
+
+Q: TradingView 数据拉取超时（改用 TradingView 数据源时）
+A: 常见原因和处理顺序：
+   1. 先确认 tvDatafeed headers bug 已修复（见第三步 问题 3.5）
+   2. 检查网络能否访问 TradingView（国内直连可能需要代理）
+   3. 小周期（1m/5m）更容易触发 TradingView 匿名限速，切换到 15m 以上测试
+   4. 长期超时的根本解决方案：在设置界面配置 TradingView 账号登录
+
+Q: API 调用报网络错误
+A: 检查网络连接；若使用代理需确认代理可用；确认 API Key 和 Base URL 配置正确。
+
+Q: config/settings.json 损坏
+A: 删除该文件，程序重启会自动生成默认配置（默认数据源为富途 OpenD）：
+   rm "PROJECT_ROOT/config/settings.json"
+
+Q: 日志在哪里
+A: PROJECT_ROOT/logs/pa_agent.log
+
+Q: 如何更新程序
+A:
+   cd PROJECT_ROOT
+   git pull
+   pip3 install -e . -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn
+   如富途 OpenD 也需更新，请到官网下载最新版覆盖安装：
+   https://support.futunn.com/topic464?lang=zh-cn&from_platform=1
+
+Q: 双击 .command 文件闪退
+A: 终端中手动运行观察输出：
+   bash "PROJECT_ROOT/运行智能体.command"
