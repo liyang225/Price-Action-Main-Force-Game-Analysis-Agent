@@ -205,6 +205,7 @@ class SecondOrderSettings(BaseModel):
     max_news_items: int = Field(default=18, ge=5, le=30)
     material_preanalysis_enabled: bool = False
     material_preanalysis_interval_minutes: int = Field(default=30, ge=1, le=240)
+    model_timeout_seconds: int = Field(default=120, ge=30, le=1800)
 
     @field_validator("symbol_preferences", mode="before")
     @classmethod

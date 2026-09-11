@@ -130,3 +130,19 @@ def test_settings_dialogs_use_standard_toggle_switches(qtbot) -> None:
     assert isinstance(dialogs[0]._thinking_check, ToggleSwitch)
     assert isinstance(dialogs[1]._enabled_check, ToggleSwitch)
     assert isinstance(dialogs[2]._flow_auto_play_check, ToggleSwitch)
+
+
+def test_settings_dialog_exposes_the_second_order_wait_time(qtbot) -> None:
+    """二阶博弈设置里的「大模型等待时间」必须反映已保存的值。"""
+    from pa_agent.config.settings import Settings
+    from pa_agent.gui.settings_dialog import SettingsDialog
+
+    settings = Settings()
+    settings.second_order.model_timeout_seconds = 300
+    dialog = SettingsDialog(settings)
+    qtbot.addWidget(dialog)
+
+    spin = dialog._model_timeout_spin
+    assert spin.value() == 300
+    # 范围与配置校验一致，界面不可能存进一个后端会拒绝的值。
+    assert (spin.minimum(), spin.maximum()) == (30, 1800)

@@ -643,8 +643,11 @@ def apply_continuity_guard(
 
     existing = str(decision.get("reasoning") or "")
     prefix = f"【程序连续性守卫】{reason}；改为不下单。 "
-    # Keep in sync with stage2_normalizer.DECISION_REASONING_MAX_LEN (schema maxLength).
-    max_len = 280
+    # Shared with stage2_normalizer, which re-truncates after this guard.
+    # Imported lazily to keep the two modules cycle-free.
+    from pa_agent.ai.stage2_normalizer import DECISION_REASONING_MAX_LEN
+
+    max_len = DECISION_REASONING_MAX_LEN
     budget = max_len - len(prefix)
     if budget < 1:
         decision["reasoning"] = prefix[:max_len]

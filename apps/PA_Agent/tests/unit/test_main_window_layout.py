@@ -540,7 +540,25 @@ def test_second_order_overview_flow_marks_stalled_active_node(qtbot) -> None:
 
     assert flow._states[7] == "stalled"
     assert "B/C概率计算" in flow._error_label.text()
-    assert "超过 30 秒未收到阶段进展或模型输出" in flow._error_label.text()
+    # 默认 model_timeout_seconds=120 → 看门狗 = 120*2+30 = 270 秒
+    assert "超过 270 秒未收到阶段进展或模型输出" in flow._error_label.text()
+
+
+def test_second_order_stall_watchdog_outlives_a_retried_model_call() -> None:
+    """后端会先于前端放弃，界面不能把一次正常重试报成卡死。"""
+    from pa_agent.gui.second_order_workspace import _stall_watchdog_seconds
+
+    def settings_with(value: object) -> object:
+        second_order = type("SecondOrder", (), {"model_timeout_seconds": value})()
+        return type("Settings", (), {"second_order": second_order})()
+
+    # 一次超时后重试，最坏情况静默约两个完整等待 + 退避，故看门狗必须更大。
+    assert _stall_watchdog_seconds(settings_with(120)) == 270.0
+    # 下限：等待时间调到最小时看门狗仍有 90 秒。
+    assert _stall_watchdog_seconds(settings_with(30)) == 90.0
+    # 越界值与读不出的值都退回默认 120 秒，绝不因为坏配置把看门狗归零。
+    assert _stall_watchdog_seconds(settings_with(9999)) == 3630.0
+    assert _stall_watchdog_seconds(settings_with("坏值")) == 270.0
 
 
 def test_material_cache_status_loads_when_tab_is_first_opened(
@@ -700,9 +718,9 @@ def test_second_order_result_cards_and_llm_audit_follow_requested_layout(qtbot, 
     assert sector_names.index("结构结论") < sector_names.index("政策环境")
     assert "周期来源" not in sector_names
     assert "当下参与者行为推断（HMM行为先验）" not in sector_names
-    assert "主导参与者行为推演" in game_names
+    assert "当前行为与 A 类概率" in game_names
     assert "当下参与者行为推断（HMM行为先验）" in game_names
-    assert game_names.index("该参与者下一步博弈行为推演") < game_names.index("当下参与者行为推断（HMM行为先验）")
+    assert game_names.index("当前参与者行为") < game_names.index("当下参与者行为推断（HMM行为先验）")
     formula_toggle = workspace._cycle.findChild(QToolButton, "formulaToggle")
     assert formula_toggle is not None
     assert not formula_toggle.isChecked()
@@ -1008,7 +1026,7 @@ def test_game_reasoning_keeps_only_participant_and_behavior_cards(qtbot) -> None
     )
 
     text = workspace._game_reasoning.toPlainText()
-    assert "主导参与者行为推演" in text
+    assert "当前行为与 A 类概率" in text
     assert "B/C三情景概率" not in text
     assert "B 类概率含义" not in text
     assert "C 类概率含义" not in text
@@ -1863,3 +1881,53 @@ def test_second_order_labeler_catchup_worker_provides_real_market_source(
     assert captured["symbol"] == "600519.SH"
     assert isinstance(captured["market_source"], Source)
     assert calls == ["service_close", "disconnect"]
+
+
+def test_scenario_behavior_tendency_reads_the_dominant_participant() -> None:
+    """应对方案页每情景的「行为倾向」取自模型的三情景推演。"""
+    from pa_agent.gui.second_order_workspace import SecondOrderWorkspace
+
+    a_class = {
+        "主力": {
+            "scenario_expectations": {
+                "超预期强": {
+                    "trigger": "新增重磅利好",
+                    "behavior_shift": "继续借利好派发",
+                    "behavior_tendency": "继续出货为主",
+                    "risk": "最后一波拉升后崩盘",
+                },
+                "符合预期": {"behavior_tendency": "继续派发为主"},
+                "低于预期": {
+                    "trigger": "技术破位",
+                    "behavior_shift": "偏打压出货",
+                    "behavior_tendency": "偏打压出货",
+                },
+            }
+        }
+    }
+    tendency = SecondOrderWorkspace._scenario_behavior_tendency
+    risk = SecondOrderWorkspace._scenario_behavior_risk
+
+    assert tendency(a_class, "主力", "符合预期") == "继续派发为主"
+    assert (
+        tendency(a_class, "主力", "超预期强")
+        == "继续借利好派发；继续出货为主（触发：新增重磅利好）"
+    )
+    # 与 tendency 重复的 shift 不重复显示，触发条件附加在末尾
+    assert tendency(a_class, "主力", "低于预期") == "偏打压出货（触发：技术破位）"
+    assert tendency(a_class, "主力", "不存在的情景") == ""
+    assert tendency(a_class, None, "符合预期") == "继续派发为主"
+    assert tendency(None, "主力", "符合预期") == ""
+    assert tendency({}, "主力", "符合预期") == ""
+    assert (
+        tendency(
+            {"散户": {"scenario_expectations": {"符合预期": {"behavior_tendency": "理性跟随"}}}},
+            "主力",
+            "符合预期",
+        )
+        == "理性跟随"
+    )
+    # 风险/后续：只有提示词给了才有，缺省不占位
+    assert risk(a_class, "主力", "超预期强") == "最后一波拉升后崩盘"
+    assert risk(a_class, "主力", "符合预期") == ""
+    assert risk(None, "主力", "超预期强") == ""

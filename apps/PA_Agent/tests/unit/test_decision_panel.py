@@ -237,3 +237,54 @@ def test_panel_robust_against_garbage(pred: dict):
     except Exception:
         # If it raises, the GUI code needs defensive fixes
         pass
+
+
+def _wheel_up_event():
+    from PyQt6.QtCore import QPoint, QPointF, Qt
+    from PyQt6.QtGui import QWheelEvent
+
+    return QWheelEvent(
+        QPointF(10, 10),
+        QPointF(10, 10),
+        QPoint(0, 0),
+        QPoint(0, -120),
+        Qt.MouseButton.NoButton,
+        Qt.KeyboardModifier.NoModifier,
+        Qt.ScrollPhase.NoScrollPhase,
+        False,
+    )
+
+
+def test_reasoning_box_scrolls_with_the_mouse_wheel(panel: DecisionPanel):
+    """「分析理由」必须能滚动读完整段理由，而不是停在省略号上。"""
+    from PyQt6.QtWidgets import QApplication
+
+    long_reasoning = "主力在低位反复震仓，量能持续萎缩，等待次日承接确认。" * 20
+    panel.resize(420, 420)
+    panel.set_decision(
+        {
+            **_valid_no_order()["decision"],
+            "order_type": "限价单",
+            "order_direction": "做多",
+            "entry_price": 10.2,
+            "take_profit_price": 11.0,
+            "stop_loss_price": 9.8,
+            "reasoning": long_reasoning,
+        }
+    )
+    panel.show()
+    QApplication.processEvents()
+
+    edit = panel._reasoning_edit
+    bar = edit.verticalScrollBar()
+
+    assert edit.toPlainText().endswith("等待次日承接确认。")
+    assert not edit.toPlainText().endswith("…")
+    assert bar.maximum() > 0, "长理由必须产生可滚动范围"
+
+    before = bar.value()
+    QApplication.sendEvent(edit.viewport(), _wheel_up_event())
+    QApplication.processEvents()
+
+    assert bar.value() > before, "滚轮必须能滚动分析理由"
+

@@ -131,6 +131,7 @@ def test_second_order_data_settings_round_trip(tmp_path):
     original.second_order.material_preanalysis_enabled = True
     original.second_order.material_preanalysis_schedule = "14:45"
     original.second_order.material_preanalysis_interval_minutes = 24
+    original.second_order.model_timeout_seconds = 240
     original.futu.opend_host = "10.0.0.7"
     original.futu.opend_port = 12345
 
@@ -152,8 +153,24 @@ def test_second_order_data_settings_round_trip(tmp_path):
     assert loaded.second_order.material_preanalysis_enabled is True
     assert loaded.second_order.material_preanalysis_schedule == "14:45"
     assert loaded.second_order.material_preanalysis_interval_minutes == 24
+    assert loaded.second_order.model_timeout_seconds == 240
     assert loaded.futu.opend_host == "10.0.0.7"
     assert loaded.futu.opend_port == 12345
+
+
+def test_second_order_model_wait_time_defaults_and_bounds():
+    """The wait time is user-tunable, but only within a sane range."""
+    from pydantic import ValidationError
+
+    from pa_agent.config.settings import SecondOrderSettings
+
+    assert SecondOrderSettings().model_timeout_seconds == 120
+    # Too short to survive a slow gateway, and an unbounded value would let a
+    # dead connection hold the analysis thread for the rest of the session.
+    with pytest.raises(ValidationError):
+        SecondOrderSettings(model_timeout_seconds=5)
+    with pytest.raises(ValidationError):
+        SecondOrderSettings(model_timeout_seconds=3600)
 
 
 def test_second_order_settings_discard_legacy_news_keywords():

@@ -300,6 +300,15 @@ class DecisionPanel(QWidget):
         self._reasoning_edit.setReadOnly(True)
         self._reasoning_edit.setObjectName("answerPane")
         self._reasoning_edit.setStyleSheet(_REASON_EDIT_CSS)
+        # 分析理由可能长于可视高度：滚轮必须能滚动，溢出时出现滚动条。
+        # 横向滚动条关闭，换行由控件宽度决定，避免理由被横向推出版面。
+        self._reasoning_edit.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
+        self._reasoning_edit.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self._reasoning_edit.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
         self._reasoning_edit.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )

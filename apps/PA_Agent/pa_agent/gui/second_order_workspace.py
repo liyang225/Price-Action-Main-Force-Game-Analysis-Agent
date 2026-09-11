@@ -597,13 +597,19 @@ class _AnalysisFlowCard(QFrame):
         "stalled": ("#49351E", "#F2B66D", "处理卡顿"),
     }
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        *,
+        stall_timeout_seconds: float = 30.0,
+    ) -> None:
         super().__init__(parent)
         self.setObjectName("analysisFlowCard")
         self._states = ["pending"] * len(self.NODE_NAMES)
         self._details = [""] * len(self.NODE_NAMES)
         self._active_index: int | None = None
         self._auto_fit = True
+        self._stall_timeout_seconds = max(1.0, float(stall_timeout_seconds))
         self._stall_timer = QTimer(self)
         self._stall_timer.setSingleShot(True)
         self._stall_timer.timeout.connect(self._mark_active_stalled)
@@ -680,7 +686,7 @@ class _AnalysisFlowCard(QFrame):
         self._details[index] = detail
         if status == "active":
             self._active_index = index
-            self._stall_timer.start(30_000)
+            self._stall_timer.start(int(self._stall_timeout_seconds * 1000))
             self._flow_hint.setText(f"处理中：{self.NODE_NAMES[index]}")
         elif self._active_index == index:
             self._stall_timer.stop()
@@ -704,7 +710,8 @@ class _AnalysisFlowCard(QFrame):
             self.set_status(
                 self._active_index,
                 "stalled",
-                "超过 30 秒未收到阶段进展或模型输出，请检查后台任务或重试。",
+                f"超过 {int(self._stall_timeout_seconds)} 秒未收到阶段进展或模型输出，"
+                "请检查后台任务或重试。",
             )
 
     def _zoom(self, factor: float) -> None:
@@ -917,6 +924,23 @@ def _run_dsa_market_review(payload: Mapping[str, Any]) -> dict[str, Any]:
     return ensure_current_dsa_market_review(payload, force=True)
 
 
+def _stall_watchdog_seconds(settings: Any) -> float:
+    """Flow-card stall watchdog must outlive the backend's worst model call.
+
+    The backend waits ``model_timeout_seconds`` per call and retries a network
+    timeout once, so a healthy-but-slow run can legitimately sit silent for
+    about twice that long before failing on its own.  Streaming tokens reset
+    the watchdog, so this only delays the "处理卡顿" report for silent stalls.
+    """
+    so = getattr(settings, "second_order", None)
+    try:
+        timeout = int(getattr(so, "model_timeout_seconds", 120) or 120)
+    except (TypeError, ValueError):
+        timeout = 120
+    timeout = max(30, min(1800, timeout))
+    return float(max(90, timeout * 2 + 30))
+
+
 def _embedded_service(
     context: Any,
     market_source: Any,
@@ -968,6 +992,14 @@ def _embedded_service(
     except (TypeError, ValueError):
         max_news_items = 18
     max_news_items = max(5, min(30, max_news_items))
+    so_settings = getattr(settings, "second_order", None)
+    try:
+        model_timeout_seconds = int(
+            getattr(so_settings, "model_timeout_seconds", 120) or 120
+        )
+    except (TypeError, ValueError):
+        model_timeout_seconds = 120
+    model_timeout_seconds = max(30, min(1800, model_timeout_seconds))
     return PAEmbeddedService(
         market_source=PAMarketDataAdapter(
             market_source,
@@ -985,6 +1017,7 @@ def _embedded_service(
         progress_sink=sink,
         labeler_status_tracker=_shared_labeler_status_tracker(),
         pa_settings_path=_pa_settings_path(),
+        model_timeout_seconds=model_timeout_seconds,
         dsa_runtime_enabled=True,
     )
 
@@ -1749,7 +1782,7 @@ class SecondOrderWorkspace(QWidget):
         waiting = {
             "推演状态": "等待运行二阶推演",
             "分析对象": stock_name or symbol or "未选择品种",
-            "待生成内容": "主导参与者、主导参与者行为推演及关键证据",
+            "待生成内容": "主导参与者、当前行为判断、A 类概率及关键证据",
         }
         self._reasoning.set_payload(waiting, waiting)
         configured_sector = self._symbol_preference(symbol, "sector_name") or str(
@@ -1912,7 +1945,9 @@ class SecondOrderWorkspace(QWidget):
         # 概览只保留原始数据入口；分析卡片在对应业务标签页中展示。
         self._overview._scroll.hide()
         self._overview.setMaximumHeight(48)
-        self._overview_flow = _AnalysisFlowCard()
+        self._overview_flow = _AnalysisFlowCard(
+            stall_timeout_seconds=_stall_watchdog_seconds(self._pa_settings)
+        )
         self._overview_stream = _StreamingProgressView()
         overview_tab = QWidget()
         self._overview_tab = overview_tab
@@ -3628,7 +3663,7 @@ class SecondOrderWorkspace(QWidget):
                 "参与者识别": participant_analysis,
                 "参与者先验": participant_priors,
                 "参与者后验": participant_posteriors,
-                "主导参与者行为推演": first.get("a_class"),
+                "当前行为与 A 类概率": first.get("a_class"),
             },
             {
                 "game_signals": input_.get("game_signals"),
@@ -3649,6 +3684,12 @@ class SecondOrderWorkspace(QWidget):
                         "下一完整时段概率": self._scenario_period_probability(item),
                         "开盘首次下跌达止损概率": self._stop_first_probability(item),
                         "状态": item.get("status"),
+                        "行为倾向": self._scenario_behavior_tendency(
+                            item.get("a_class"), participant, item.get("name")
+                        ),
+                        "风险": self._scenario_behavior_risk(
+                            item.get("a_class"), participant, item.get("name")
+                        ),
                         "应对": item.get("action_advice") or "暂无可执行动作",
                     }
                     for item in branches
@@ -3801,6 +3842,60 @@ class SecondOrderWorkspace(QWidget):
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             return "暂无数据"
         return f"{float(value) * 100:.1f}%"
+
+    @staticmethod
+    def _scenario_expectation_item(
+        a_class: object, participant: object, scenario: object
+    ) -> Mapping[str, Any]:
+        """该情景下主导参与者的行为倾向条目；取不到返回空映射。
+
+        ARCHITECTURE §10.2 要求每个情景都给出各参与者最可能的行为。A 类概率本身
+        与情景无关，区分三情景的内容就是模型给出的这三段倾向，所以取不到时界面
+        按缺省处理，不影响其余信息。
+        """
+        if not isinstance(a_class, Mapping):
+            return {}
+        forecast = a_class.get(participant)
+        if not isinstance(forecast, Mapping):
+            forecast = next(
+                (item for item in a_class.values() if isinstance(item, Mapping)), None
+            )
+        if not isinstance(forecast, Mapping):
+            return {}
+        expectations = forecast.get("scenario_expectations")
+        if not isinstance(expectations, Mapping):
+            return {}
+        item = expectations.get(str(scenario or ""))
+        return item if isinstance(item, Mapping) else {}
+
+    @staticmethod
+    def _scenario_behavior_tendency(
+        a_class: object, participant: object, scenario: object
+    ) -> str:
+        """该情景下主导参与者会怎么做（行为变化 + 行为倾向 + 触发条件）。"""
+        item = SecondOrderWorkspace._scenario_expectation_item(
+            a_class, participant, scenario
+        )
+        ordered: list[str] = []
+        for key in ("behavior_shift", "behavior_tendency"):
+            text = str(item.get(key) or "").strip()
+            if text and text not in ordered:
+                ordered.append(text)
+        body = "；".join(ordered)
+        if not body:
+            return ""
+        trigger = str(item.get("trigger") or "").strip()
+        return f"{body}（触发：{trigger}）" if trigger else body
+
+    @staticmethod
+    def _scenario_behavior_risk(
+        a_class: object, participant: object, scenario: object
+    ) -> str:
+        """该情景下这个行为倾向自身的风险/后续（散户提示词里的「后续」一行）。"""
+        item = SecondOrderWorkspace._scenario_expectation_item(
+            a_class, participant, scenario
+        )
+        return str(item.get("risk") or "").strip()
 
     @classmethod
     def _gate_detail_reason(

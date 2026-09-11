@@ -301,6 +301,16 @@ class SettingsDialog(QDialog):
         )
         tavily_row.addWidget(self._show_tavily_key_btn)
         second_order_form.addRow("Tavily API Key:", tavily_row)
+        self._model_timeout_spin = QSpinBox()
+        self._model_timeout_spin.setRange(30, 1800)
+        self._model_timeout_spin.setSingleStep(10)
+        self._model_timeout_spin.setValue(120)
+        self._model_timeout_spin.setSuffix(" 秒")
+        self._model_timeout_spin.setToolTip(
+            "每次大模型调用的最长等待时间。网络慢或模型响应久时调大；\n"
+            "超时后二阶博弈会自动重试一次，流程卡看门狗也会按该值放大。"
+        )
+        second_order_form.addRow("大模型等待时间:", self._model_timeout_spin)
         second_order_note = QLabel(
             "Tavily 仅用于补充新闻材料；AkShare 通过公开接口调用，不需要 API Key。"
         )
@@ -335,6 +345,7 @@ class SettingsDialog(QDialog):
             self._settings.second_order.market_data_source
         )
         self._second_order_source_combo.setCurrentIndex(max(source_index, 0))
+        self._model_timeout_spin.setValue(self._settings.second_order.model_timeout_seconds)
 
         self._analysis_bar_count_spin.setValue(g.analysis_bar_count)
         self._refresh_interval_spin.setValue(g.refresh_interval_ms)
@@ -518,6 +529,9 @@ class SettingsDialog(QDialog):
         self._settings.second_order.tavily_api_key = self._tavily_api_key_edit.text().strip()
         self._settings.second_order.market_data_source = (
             self._second_order_source_combo.currentData()
+        )
+        self._settings.second_order.model_timeout_seconds = (
+            self._model_timeout_spin.value()
         )
 
         save_settings(self._settings, SETTINGS_JSON_PATH)

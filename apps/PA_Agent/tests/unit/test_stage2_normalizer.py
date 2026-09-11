@@ -275,7 +275,7 @@ def test_normalize_next_bar_prediction_features_used_min_set():
 
 
 def test_normalize_decision_reasoning_truncation() -> None:
-    """decision.reasoning > 280 chars gets truncated."""
+    """A runaway decision.reasoning is still bounded by the safety net."""
     from pa_agent.ai.stage2_normalizer import DECISION_REASONING_MAX_LEN, normalize_stage2
 
     obj = {
@@ -285,7 +285,7 @@ def test_normalize_decision_reasoning_truncation() -> None:
             "entry_price": None,
             "take_profit_price": None,
             "stop_loss_price": None,
-            "reasoning": "长" * 400,
+            "reasoning": "长" * (DECISION_REASONING_MAX_LEN + 400),
             "diagnosis_confidence": 60,
             "diagnosis_confidence_reasoning": "t",
             "trade_confidence": 40,
@@ -302,6 +302,43 @@ def test_normalize_decision_reasoning_truncation() -> None:
     out = normalize_stage2(obj)
     assert len(out["decision"]["reasoning"]) == DECISION_REASONING_MAX_LEN
     assert out["decision"]["reasoning"].endswith("…")
+
+
+def test_normalize_decision_reasoning_keeps_a_small_overshoot() -> None:
+    """The prompt asks for <=280 chars; models overshoot slightly.
+
+    Real records stored exactly 280 chars ending in "…" while the model had
+    written 289-297, so the 决策 tab showed an ellipsis with nothing behind it.
+    A small overshoot must survive verbatim.
+    """
+    from pa_agent.ai.stage2_normalizer import normalize_stage2
+
+    overshoot = "主力在低位震仓，量能萎缩，等待次日承接确认。" * 15
+    assert 280 < len(overshoot) < 400
+    obj = {
+        "decision": {
+            "order_type": "不下单",
+            "order_direction": None,
+            "entry_price": None,
+            "take_profit_price": None,
+            "stop_loss_price": None,
+            "reasoning": overshoot,
+            "diagnosis_confidence": 60,
+            "diagnosis_confidence_reasoning": "t",
+            "trade_confidence": 40,
+            "trade_confidence_reasoning": "t",
+            "estimated_win_rate": None,
+            "estimated_win_rate_reasoning": None,
+            "key_factors": [],
+            "watch_points": [],
+            "risk_assessment": "t",
+        },
+        "decision_trace": [],
+        "terminal": {"node_id": "10.2", "outcome": "wait", "label": "wait"},
+    }
+    out = normalize_stage2(obj)
+    assert out["decision"]["reasoning"] == overshoot
+    assert not out["decision"]["reasoning"].endswith("…")
 
 
 def test_normalize_stage2_retruncates_after_continuity_guard() -> None:

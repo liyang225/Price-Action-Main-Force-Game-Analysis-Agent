@@ -193,13 +193,15 @@ def test_apply_continuity_guard_forces_no_order():
 
 
 def test_apply_continuity_guard_reasoning_within_max_len():
+    from pa_agent.ai.stage2_normalizer import DECISION_REASONING_MAX_LEN
+
     ctx = {
         "direction": "neutral",
         "always_in_branch": None,
         "has_previous_plan": False,
         "cooldown_bars": 3,
     }
-    long_body = "x" * 300
+    long_body = "x" * (DECISION_REASONING_MAX_LEN + 100)
     stage2 = {
         "decision": {
             "order_type": "限价单",
@@ -213,7 +215,7 @@ def test_apply_continuity_guard_reasoning_within_max_len():
     }
     out = apply_continuity_guard(stage2, ctx)
     reasoning = out["decision"]["reasoning"]
-    assert len(reasoning) <= 280
+    assert len(reasoning) <= DECISION_REASONING_MAX_LEN
     assert reasoning.startswith("【程序连续性守卫】")
 
 

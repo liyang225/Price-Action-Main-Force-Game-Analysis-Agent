@@ -14,8 +14,16 @@ from pa_agent.util.price_tick import (
 
 logger = logging.getLogger(__name__)
 
-# Max length for decision.reasoning (stage-2 trade rationale paragraph).
-DECISION_REASONING_MAX_LEN = 280
+# Safety net for decision.reasoning (stage-2 trade rationale paragraph).
+#
+# The prompt asks the model for <=280 chars.  Real records show the model
+# overshooting by a handful of characters (observed 289-297), and cutting
+# exactly at the prompt budget chopped off the end of the final sentence and
+# stored a "…" in the record — so the decision tab showed an ellipsis the user
+# could not scroll past, because the text was already gone.  Keep a generous
+# bound instead: a small overshoot survives verbatim, while a runaway answer
+# still cannot bloat the record.
+DECISION_REASONING_MAX_LEN = 1500
 
 # ── Model alias mappings (Stage 1 normalizer has the same; keep in sync) ──
 
@@ -661,7 +669,11 @@ def _ensure_decision_required_fields(
 
 
 def _truncate_decision_reasoning(decision: dict[str, Any]) -> bool:
-    """Cap decision.reasoning length to avoid verbose JSON and schema failures."""
+    """Bound decision.reasoning so a runaway answer cannot bloat the record.
+
+    This is a safety net, not the prompt's 280-char budget: cutting at the
+    budget mangled routine few-character overshoots (see module constant).
+    """
     reasoning = decision.get("reasoning")
     if not isinstance(reasoning, str):
         return False
