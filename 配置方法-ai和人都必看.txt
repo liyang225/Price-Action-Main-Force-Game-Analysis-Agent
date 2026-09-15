@@ -1,0 +1,68 @@
+1.先去富途牛牛官网下载安装富途open d.
+2.若需要二阶博弈，至少需要配置tavily API key，去官网邮箱注册创建key即可，每月可以免费拉1000条新闻
+3.github上（需使用网络代理工具）下载Daily stock analysis，二阶博弈设置中接入DSA的大盘分析记录存放路径
+4.按下面方式连接本机 DSA。无需重新把私人绝对路径写回源码，建议只在本机环境变量或本机启动脚本中配置。
+确认 DSA 本机安装目录
+例如：
+D:\Tools\DailyStockAnalysis
+该目录应包含：
+D:\Tools\DailyStockAnalysis.env
+D:\Tools\DailyStockAnalysis\data\stock_analysis.db
+D:\Tools\DailyStockAnalysis\resources\backend\stock_analysis\stock_analysis.exe
+实际目录不同，以本机 DSA 的文件位置为准。
+配置三个路径
+DSA_INSTALL_ROOT
+填写 DSA 安装根目录，例如：
+D:\Tools\DailyStockAnalysis
+DSA_EXECUTABLE
+填写 DSA 后端程序的完整路径，例如：
+D:\Tools\DailyStockAnalysis\resources\backend\stock_analysis\stock_analysis.exe
+SECOND_ORDER_DSA_DATABASE
+可以填写 DSA 的 data 文件夹：
+D:\Tools\DailyStockAnalysis\data
+也可以直接填写数据库文件：
+D:\Tools\DailyStockAnalysis\data\stock_analysis.db
+Windows 永久配置方式
+在 PowerShell 中执行：
+[Environment]::SetEnvironmentVariable(
+"DSA_INSTALL_ROOT",
+"D:\Tools\DailyStockAnalysis",
+"User"
+)
+[Environment]::SetEnvironmentVariable(
+"DSA_EXECUTABLE",
+"D:\Tools\DailyStockAnalysis\resources\backend\stock_analysis\stock_analysis.exe",
+"User"
+)
+[Environment]::SetEnvironmentVariable(
+"SECOND_ORDER_DSA_DATABASE",
+"D:\Tools\DailyStockAnalysis\data",
+"User"
+)
+配置后关闭并重新打开程序。环境变量是在程序启动时读取的。
+仅在本机启动脚本中硬编码
+也可以在顶层 run.bat 的 setlocal 后添加：
+set "DSA_INSTALL_ROOT=D:\Tools\DailyStockAnalysis"
+set "DSA_EXECUTABLE=%DSA_INSTALL_ROOT%\resources\backend\stock_analysis\stock_analysis.exe"
+set "SECOND_ORDER_DSA_DATABASE=%DSA_INSTALL_ROOT%\data"
+这种方式只对本次启动有效。包含个人路径的 run.bat 不应提交到 GitHub。
+程序内配置
+PA Agent 设置界面的“DSA data 文件夹”可以填写：
+D:\Tools\DailyStockAnalysis\data
+或者：
+D:\Tools\DailyStockAnalysis\data\stock_analysis.db
+界面配置的数据库路径优先于 SECOND_ORDER_DSA_DATABASE。不过界面只能指定数据库；需要由 PA Agent 主动启动 DSA 大盘复盘时，仍应配置 DSA_INSTALL_ROOT 和 DSA_EXECUTABLE。
+数据连接要求
+数据库必须是 DSA 实际使用的 SQLite 数据库，并满足：
+文件名通常为 stock_analysis.db
+存在 analysis_history 表
+DSA 已生成 code = 'MARKET'
+对应记录的 report_type = 'market_review'
+连接关系为：
+PA Agent
+-> SecondOrderGame
+-> 读取 DSA 的 stock_analysis.db
+-> 缓存不存在或需要刷新时启动 stock_analysis.exe
+-> DSA 写回数据库
+-> SecondOrderGame 重新读取最新大盘复盘结果
+若只读取 DSA 已有结果，只配置数据库路径即可；若要在 PA Agent 内点击刷新并自动调用 DSA，则三个路径都必须正确。
