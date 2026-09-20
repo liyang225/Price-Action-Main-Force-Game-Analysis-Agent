@@ -196,6 +196,41 @@ QPushButton#dangerButton:hover { background-color: rgba(255,71,87,0.12); }
 QPushButton#quickPromptButton { text-align: left; padding: 5px 10px; color: #9AA5B1; }
 QPushButton#quickPromptButton:hover { color: #E8ECF1; }
 
+/* Settings-page save action.  It ships as a ghost control — the page already
+   has a commit point, and the operator only needs it once a field is touched.
+   On first edit it wakes into the accent blue: text, hairline frame and face
+   all lift on the same beat, with a translucent blue veil breathing over the
+   face (see _SaveAttentionVeil).  No white fill — that would break the dark
+   terminal's single-accent restraint. */
+QPushButton#saveSettingsButton {
+    background-color: transparent;
+    color: #9AA5B1;
+    border: 1px solid #22272F;
+    font-weight: 400;
+}
+QPushButton#saveSettingsButton:hover {
+    color: #E8ECF1;
+    background-color: #1A1F27;
+    border-color: #333A45;
+}
+/* Awake state: face stays a deep accent-tinted charcoal so the breathing veil
+   above it reads as a glow rather than a flat block. */
+QPushButton#saveSettingsButton[savePending="true"] {
+    background-color: #16233A;
+    color: #DCE6F2;
+    border: 1px solid #4A7EBB;
+    font-weight: 500;
+}
+QPushButton#saveSettingsButton[savePending="true"]:hover {
+    background-color: #1B2C48;
+    color: #E8EFF8;
+    border-color: #5B8CC9;
+}
+QPushButton#saveSettingsButton[savePending="true"]:pressed {
+    background-color: #121B2C;
+    border-color: #3D6A9E;
+}
+
 /* ── Checkbox ─────────────────────────────────────────────────────────── */
 QCheckBox { color: #E8ECF1; spacing: 6px; }
 QCheckBox::indicator {

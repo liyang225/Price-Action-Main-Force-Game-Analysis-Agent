@@ -25,21 +25,6 @@ _DWMWA_USE_IMMERSIVE_DARK_MODE = 20
 _DWMWA_BORDER_COLOR = 34
 _DWMWA_CAPTION_COLOR = 35
 _DWMWA_TEXT_COLOR = 36
-_WM_SETICON = 0x0080
-_ICON_SMALL = 0
-_ICON_BIG = 1
-_TRANSPARENT_WINDOW_ICON_HANDLE: int | None = None
-
-
-class _IconInfo(ctypes.Structure):
-    _fields_ = (
-        ("fIcon", ctypes.c_int),
-        ("xHotspot", ctypes.c_ulong),
-        ("yHotspot", ctypes.c_ulong),
-        ("hbmMask", ctypes.c_void_p),
-        ("hbmColor", ctypes.c_void_p),
-    )
-
 _COMBO_VIEW_QSS = """
 QAbstractItemView {
     background: #181C22;
@@ -239,55 +224,13 @@ def _apply_windows_caption_style(widget: QWidget) -> None:
         return
 
 
-def _transparent_window_icon_handle() -> int | None:
-    global _TRANSPARENT_WINDOW_ICON_HANDLE
-    if _TRANSPARENT_WINDOW_ICON_HANDLE is not None:
-        return _TRANSPARENT_WINDOW_ICON_HANDLE
-    try:
-        gdi32 = ctypes.windll.gdi32
-        user32 = ctypes.windll.user32
-        gdi32.CreateBitmap.argtypes = (
-            ctypes.c_int,
-            ctypes.c_int,
-            ctypes.c_uint,
-            ctypes.c_uint,
-            ctypes.c_void_p,
-        )
-        gdi32.CreateBitmap.restype = ctypes.c_void_p
-        gdi32.DeleteObject.argtypes = (ctypes.c_void_p,)
-        gdi32.DeleteObject.restype = ctypes.c_int
-        user32.CreateIconIndirect.argtypes = (ctypes.POINTER(_IconInfo),)
-        user32.CreateIconIndirect.restype = ctypes.c_void_p
-        mask_bits = (ctypes.c_ubyte * 1)(0xFF)
-        color_bits = (ctypes.c_ubyte * 4)(0, 0, 0, 0)
-        mask = gdi32.CreateBitmap(1, 1, 1, 1, mask_bits)
-        color = gdi32.CreateBitmap(1, 1, 1, 32, color_bits)
-        if not mask or not color:
-            return None
-        icon_info = _IconInfo(1, 0, 0, mask, color)
-        handle = user32.CreateIconIndirect(ctypes.byref(icon_info))
-        gdi32.DeleteObject(mask)
-        gdi32.DeleteObject(color)
-        if not handle:
-            return None
-        _TRANSPARENT_WINDOW_ICON_HANDLE = int(handle)
-        return _TRANSPARENT_WINDOW_ICON_HANDLE
-    except (AttributeError, OSError):
-        return None
-
-
-def _hide_windows_main_window_caption_identity(widget: QWidget) -> None:
+def _hide_windows_main_window_caption_text(widget: QWidget) -> None:
+    """Keep the minimal caption without replacing Qt's application icon."""
     if sys.platform != "win32" or not isinstance(widget, QMainWindow) or not widget.isWindow():
         return
     try:
         hwnd = ctypes.c_void_p(int(widget.winId()))
-        user32 = ctypes.windll.user32
-        transparent_icon = _transparent_window_icon_handle()
-        if transparent_icon is None:
-            return
-        user32.SetWindowTextW(hwnd, "")
-        user32.SendMessageW(hwnd, _WM_SETICON, _ICON_SMALL, transparent_icon)
-        user32.SendMessageW(hwnd, _WM_SETICON, _ICON_BIG, transparent_icon)
+        ctypes.windll.user32.SetWindowTextW(hwnd, "")
     except (AttributeError, OSError):
         return
 
@@ -298,7 +241,7 @@ class _WindowsCaptionStyler(QObject):
             _apply_windows_caption_style(watched)
             QTimer.singleShot(
                 0,
-                lambda window=watched: _hide_windows_main_window_caption_identity(window),
+                lambda window=watched: _hide_windows_main_window_caption_text(window),
             )
         return False
 
@@ -320,4 +263,4 @@ def apply_theme(app: QApplication) -> None:
         app._windows_caption_styler = caption_styler
     for widget in app.topLevelWidgets():
         _apply_windows_caption_style(widget)
-        _hide_windows_main_window_caption_identity(widget)
+        _hide_windows_main_window_caption_text(widget)

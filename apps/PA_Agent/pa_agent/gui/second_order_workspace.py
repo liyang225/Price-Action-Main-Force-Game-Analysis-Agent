@@ -11,7 +11,15 @@ from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any, Mapping
 
-from PyQt6.QtCore import QTime, QThread, QTimer, pyqtSignal
+from PyQt6.QtCore import (
+    QEasingCurve,
+    QEvent,
+    QPropertyAnimation,
+    QTime,
+    QThread,
+    QTimer,
+    pyqtSignal,
+)
 from PyQt6.QtGui import QBrush, QColor, QFont, QPainter, QPen, QTextCursor
 from PyQt6.QtWidgets import (
     QAbstractItemView,
@@ -21,6 +29,7 @@ from PyQt6.QtWidgets import (
     QDialogButtonBox,
     QFrame,
     QFormLayout,
+    QGraphicsOpacityEffect,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -68,6 +77,97 @@ DEFAULT_SECOND_ORDER_ROOT = Path(
 # with _NEWS_ORIGINAL_ROW_ROLE so clicking it again collapses the text box.
 _NEWS_SNIPPET_ROLE = Qt.ItemDataRole.UserRole
 _NEWS_ORIGINAL_ROW_ROLE = Qt.ItemDataRole.UserRole + 1
+
+# Breathing reminder shown on the settings-page save button once a field has
+# been touched.  One translucent accent-blue veil sits on the button face and
+# its opacity breathes; the button's own text and hairline border are left to
+# the state stylesheet, so the whole control lifts together on a single beat
+# instead of fighting itself with counter-phase layers.
+_SAVE_ATTENTION_PERIOD_MS = 2200
+_SAVE_ATTENTION_OPACITY = (0.10, 0.34)
+
+
+class _SaveAttentionVeil(QFrame):
+    """Translucent blue sheet pinned to the button, breathing via its opacity."""
+
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent)
+        self.setObjectName("saveSettingsButtonVeil")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        # Only ever paints the fill; the button keeps its own border on top.
+        self.setStyleSheet(
+            "QFrame#saveSettingsButtonVeil {"
+            " background-color: #4A7EBB;"
+            " border: none;"
+            " border-radius: 4px;"
+            "}"
+        )
+        effect = QGraphicsOpacityEffect(self)
+        effect.setOpacity(0.0)
+        self.setGraphicsEffect(effect)
+
+    def eventFilter(self, watched: object, event: object) -> bool:  # noqa: N802
+        if watched is self.parentWidget() and event.type() in (
+            QEvent.Type.Resize,
+            QEvent.Type.Move,
+            QEvent.Type.Show,
+        ):
+            self.setGeometry(self.parentWidget().rect())
+        return False
+
+
+def start_save_attention_pulse(button: QPushButton) -> None:
+    """Breathe a translucent accent-blue veil across the save button."""
+    animations = getattr(button, "_save_attention_animations", [])
+    if animations:
+        return
+
+    veil = button.findChild(QFrame, "saveSettingsButtonVeil")
+    if veil is None:
+        veil = _SaveAttentionVeil(button)
+        button.installEventFilter(veil)
+    veil.setGeometry(button.rect())
+    veil.raise_()
+
+    effect = veil.graphicsEffect()
+    if effect is None:  # pragma: no cover - defensive
+        return
+
+    animation = QPropertyAnimation(effect, b"opacity", button)
+    animation.setStartValue(_SAVE_ATTENTION_OPACITY[0])
+    animation.setEndValue(_SAVE_ATTENTION_OPACITY[1])
+    animation.setDuration(_SAVE_ATTENTION_PERIOD_MS // 2)
+    animation.setEasingCurve(QEasingCurve.Type.InOutSine)
+    animation.setLoopCount(-1)
+
+    def _reverse(anim: QPropertyAnimation = animation) -> None:
+        anim.setDirection(
+            QPropertyAnimation.Direction.Backward
+            if anim.direction() == QPropertyAnimation.Direction.Forward
+            else QPropertyAnimation.Direction.Forward
+        )
+
+    animation.finished.connect(_reverse)
+    animation.start()
+    button._save_attention_animations = [animation]  # type: ignore[attr-defined]
+
+
+def stop_save_attention_pulse(button: QPushButton) -> None:
+    """Stop the breathing loop and fade the veil back out."""
+    animations = getattr(button, "_save_attention_animations", None)
+    if animations:
+        for animation in animations:
+            animation.stop()
+    button._save_attention_animations = []  # type: ignore[attr-defined]
+    # Only the opacity goes to zero — the geometry is left alone so the next
+    # wake-up can resume without a re-layout.
+    veil = button.findChild(QFrame, "saveSettingsButtonVeil")
+    if veil is not None:
+        effect = veil.graphicsEffect()
+        if effect is not None:
+            effect.setOpacity(0.0)
 
 
 class _AnalysisResultPanel(QWidget):
@@ -2707,7 +2807,24 @@ class SecondOrderWorkspace(QWidget):
         self._llm_model_value = QLabel()
         self._thinking_value = QLabel()
         self._reasoning_value = QLabel()
-        form.addRow("LLM API URL", self._llm_url_value)
+        self._llm_url_row = QWidget()
+        self._llm_url_row_layout = QHBoxLayout(self._llm_url_row)
+        self._llm_url_row_layout.setContentsMargins(0, 0, 0, 0)
+        self._llm_url_row_layout.setSpacing(8)
+        self._llm_url_row_layout.addWidget(self._llm_url_value)
+        self._llm_url_row_layout.addStretch(1)
+        # The save action is the only commit point on this page.  It starts as
+        # a ghost control and only wakes up — white face, pulsing accent frame —
+        # once the operator actually touches an editable field.
+        self._save_settings_button = QPushButton("保存")
+        self._save_settings_button.setObjectName("saveSettingsButton")
+        self._save_settings_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._save_settings_button.setToolTip(
+            "保存二阶数据设置（修改任意输入框后此按钮会提示保存）"
+        )
+        self._save_settings_button.clicked.connect(self._save_data_settings)
+        self._llm_url_row_layout.addWidget(self._save_settings_button, 0)
+        form.addRow("LLM API URL", self._llm_url_row)
         form.addRow("模型名称", self._llm_model_value)
         form.addRow("思考模式", self._thinking_value)
         form.addRow("推理强度", self._reasoning_value)
@@ -2785,9 +2902,6 @@ class SecondOrderWorkspace(QWidget):
         model_settings = QPushButton("打开 PA 模型设置")
         model_settings.clicked.connect(self._open_pa_model_settings)
         actions.addWidget(model_settings)
-        save_data = QPushButton("保存数据设置")
-        save_data.clicked.connect(self._save_data_settings)
-        actions.addWidget(save_data)
         open_config = QPushButton("打开二阶配置")
         open_config.clicked.connect(lambda: self._open_resource("config"))
         actions.addWidget(open_config)
@@ -2804,7 +2918,100 @@ class SecondOrderWorkspace(QWidget):
         layout.addLayout(actions)
         layout.addStretch()
         self.refresh_settings()
+        self._install_save_button_attention()
         return widget
+
+    def _install_save_button_attention(self) -> None:
+        """Turn the save button into a passive reminder as soon as a field is touched.
+
+        The button deliberately ships in a ghost state: it is not the page's
+        loudest element, and editing a field is what makes it relevant.  Each
+        editable control on the page therefore raises the same "you have
+        unsaved data" pulse — a white face, a blinking accent frame and a
+        breathing backdrop of the same blue.
+        """
+        button = getattr(self, "_save_settings_button", None)
+        if button is None:
+            return
+        watched: list[QWidget] = [
+            self._market_source_combo,
+            self._sector_name_edit,
+            self._sector_code_edit,
+            self._dsa_database_edit,
+            self._futu_host_edit,
+            self._futu_port_spin,
+            self._tavily_key_edit,
+        ]
+        for checkbox in (
+            getattr(self, "_news_prefetch_toggle", None),
+            getattr(self, "_material_preanalysis_toggle", None),
+        ):
+            if checkbox is not None:
+                watched.append(checkbox)
+        self._save_attention_watched: list[QWidget] = [
+            widget for widget in watched if widget is not None
+        ]
+        for widget in self._save_attention_watched:
+            # Focus and mouse press for everything: every path into the page
+            # starts by focusing a control, so this alone covers typing too.
+            widget.installEventFilter(self)
+        # Inputs additionally report text-only edits, which never change a
+        # widget while it still holds focus.
+        for field in (
+            self._sector_name_edit,
+            self._sector_code_edit,
+            self._dsa_database_edit,
+            self._futu_host_edit,
+            self._tavily_key_edit,
+        ):
+            field.textEdited.connect(self._on_settings_field_touched)
+        # Combos, spin boxes and checkboxes are already populated by the time
+        # this hook runs, so their signals cannot fire during construction.
+        for control in (
+            self._market_source_combo,
+            self._futu_port_spin,
+            getattr(self, "_news_prefetch_toggle", None),
+            getattr(self, "_material_preanalysis_toggle", None),
+        ):
+            if control is None:
+                continue
+            for signal_name in ("currentIndexChanged", "valueChanged", "toggled"):
+                signal = getattr(control, signal_name, None)
+                if signal is not None:
+                    signal.connect(self._on_settings_field_touched)
+
+    def _on_settings_field_touched(self, *_args: object) -> None:
+        button = getattr(self, "_save_settings_button", None)
+        if button is None or self._building_ui:
+            return
+        if button.property("savePending"):
+            return
+        button.setProperty("savePending", True)
+        style = button.style()
+        style.unpolish(button)
+        style.polish(button)
+        button.update()
+        start_save_attention_pulse(button)
+
+    def eventFilter(self, watched: object, event: object) -> bool:  # noqa: N802
+        if watched in getattr(self, "_save_attention_watched", ()):
+            if event.type() in (
+                QEvent.Type.MouseButtonPress,
+                QEvent.Type.FocusIn,
+            ):
+                self._on_settings_field_touched()
+        return super().eventFilter(watched, event)
+
+    def _clear_save_attention(self) -> None:
+        button = getattr(self, "_save_settings_button", None)
+        if button is None:
+            return
+        stop_save_attention_pulse(button)
+        button.setProperty("savePending", False)
+        style = button.style()
+        style.unpolish(button)
+        style.polish(button)
+        button.update()
 
     def _open_pa_model_settings(self) -> None:
         if self._pa_settings is None:
@@ -2882,6 +3089,7 @@ class SecondOrderWorkspace(QWidget):
         except Exception as exc:  # noqa: BLE001
             QMessageBox.warning(self, "保存失败", str(exc) or type(exc).__name__)
             return
+        self._clear_save_attention()
         self._status.setText("二阶数据设置已保存")
 
     def _persist_material_runtime_settings(self, second_order_settings: Any | None = None) -> None:
@@ -3664,6 +3872,9 @@ class SecondOrderWorkspace(QWidget):
                 "参与者先验": participant_priors,
                 "参与者后验": participant_posteriors,
                 "当前行为与 A 类概率": first.get("a_class"),
+                "未来行为动向": self._future_behavior_direction(
+                    branches, first.get("a_class"), participant
+                ),
             },
             {
                 "game_signals": input_.get("game_signals"),
@@ -3870,9 +4081,17 @@ class SecondOrderWorkspace(QWidget):
 
     @staticmethod
     def _scenario_behavior_tendency(
-        a_class: object, participant: object, scenario: object
+        a_class: object,
+        participant: object,
+        scenario: object,
+        *,
+        with_trigger: bool = True,
     ) -> str:
-        """该情景下主导参与者会怎么做（行为变化 + 行为倾向 + 触发条件）。"""
+        """该情景下主导参与者会怎么做（行为变化 + 行为倾向 [+ 触发条件]）。
+
+        触发条件就是情景本身的定义（大幅高开 / 平开 / 大幅低开），因此在情景名已经
+        写明的地方（博弈推演页的动向清单）可以省掉，免得每行重复一遍。
+        """
         item = SecondOrderWorkspace._scenario_expectation_item(
             a_class, participant, scenario
         )
@@ -3882,10 +4101,41 @@ class SecondOrderWorkspace(QWidget):
             if text and text not in ordered:
                 ordered.append(text)
         body = "；".join(ordered)
-        if not body:
-            return ""
+        if not body or not with_trigger:
+            return body
         trigger = str(item.get("trigger") or "").strip()
         return f"{body}（触发：{trigger}）" if trigger else body
+
+    @classmethod
+    def _future_behavior_direction(
+        cls,
+        branches: list[object],
+        a_class: object,
+        participant: object,
+    ) -> list[dict[str, str]]:
+        """未来行为动向：按三个开盘情景给出主导参与者下一步会怎么做。
+
+        A 类概率是共时的（ADR-0032），「下一步」是情景相关的，所以动向必须带着
+        情景一起给。这里与应对方案页共用同一份取值逻辑，两处不会漂移；触发条件
+        是情景本身的定义，逐行省略。
+        """
+        rows: list[dict[str, str]] = []
+        for item in branches:
+            if not isinstance(item, Mapping):
+                continue
+            name = str(item.get("name") or "").strip()
+            if not name:
+                continue
+            tendency = cls._scenario_behavior_tendency(
+                item.get("a_class", a_class),
+                participant,
+                name,
+                with_trigger=False,
+            )
+            if not tendency:
+                continue
+            rows.append({"情景": name, "行为倾向": tendency})
+        return rows
 
     @staticmethod
     def _scenario_behavior_risk(

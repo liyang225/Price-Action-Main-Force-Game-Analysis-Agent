@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" fill="none" role="img" aria-labelledby="title description">
+  <title id="title">PA Agent — Pa candlestick icon</title>
+  <desc id="description">Silver Pa lettering on a graphite rounded square. A blue candlestick forms the vertical stroke of P.</desc>
+  <rect x="4" y="4" width="248" height="248" rx="54" fill="#12151A" stroke="#46515F" stroke-width="2"/>
+  <g id="pa-lettering" fill="#E8ECF1">
+    <path id="p-bowl" d="M66 77H98C123 77 138 91 138 113C138 135 123 149 98 149H70V125H98C109 125 114 121 114 113C114 105 109 101 98 101H66Z"/>
+    <path id="a" fill-rule="evenodd" d="M181 116C161 116 148 130 148 151C148 172 161 185 178 185C185 185 191 182 195 178V183H215V117H195V124C191 119 187 116 181 116ZM182 137C190 137 195 143 195 151C195 159 190 165 182 165C174 165 169 159 169 151C169 143 174 137 182 137Z"/>
+  </g>
+  <g id="candlestick" fill="#79A9DD">
+    <path id="wick" d="M57 53H67V205H57Z"/>
+    <rect id="candle-body" x="48" y="77" width="28" height="107" rx="3"/>
+  </g>
+</svg>

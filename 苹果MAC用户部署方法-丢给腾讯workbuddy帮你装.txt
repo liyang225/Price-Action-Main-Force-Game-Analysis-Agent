@@ -1,16 +1,16 @@
 ================================================================
   PA Agent 智能体部署方法（Mac 版）
   适用环境：macOS 12+ (Monterey 及以上) + Python 3.11+ 已安装
-  默认数据源：富途 OpenD（需要用户下载安装并登录，见第四步）
+  默认数据源：富途 OpenD（由 Agent 自动下载安装，见第四步）
 ================================================================
 
 【说明】
 本文档供自动化 Agent 按步骤执行部署。每一步都有明确的命令和验收条件。
 遇到问题时按"故障排查"章节处理。最后必须通过验收环节才能交付给用户。
 
-本次 Mac 部署已把默认数据源改为"富途 OpenD"（Futu OpenD）。富途 OpenD 必须由
-用户从富途官网下载、安装并登录，Agent 负责把下载地址发给用户、指导安装登录，
-并用第四步、第七步的命令完成验收。
+【重要：OpenD 由 Agent 自己下载安装，不要让用户自己下】
+Agent 负责把富途 OpenD 下载好、装好、打开到登录界面；用户只需要在登录界面
+输入富途账号密码点登录（登录必须用户本人操作）。见第四步。
 
 【重要：Mac 与 Windows 的核心差异】
 1. MT5（MetaTrader 5）没有 macOS 原生版本，Mac 版默认使用"富途 OpenD"作为数据源
@@ -24,16 +24,17 @@
    macOS 下 pip 会自动跳过；futu-api 无平台限制，macOS 下会自动安装
 7. 项目代码已做了平台兼容：数据源通过 factory.py 工厂创建，Mac 下默认使用 Futu（OpenD）
 
-【重要：富途 OpenD 官网下载地址（必须发给用户，让用户自己下载安装）】
+【重要：富途 OpenD 下载地址（Agent 自己下，不要甩给用户）】
 
-  https://support.futunn.com/topic464?lang=zh-cn&from_platform=1
-
-- 这是富途官方"Futu OpenD / Futu API 下载"页，提供 Windows / MacOS / CentOS / Ubuntu 版本
-- Mac 用户请在该页面选择 MacOS 版下载（可视化 OpenD）
-- 官方直链（自动指向最新版；用户若找不到按钮可直接用）：
+  Mac 官方直链（自动指向最新版）：
     https://www.futunn.com/download/fetch-lasted-link?name=opend-macos
-- 只从富途官网下载，不要使用第三方下载站 / 网盘里的安装包
-- 富途 OpenD 不需要 API Key，但需要一个富途账号（牛牛号 / 邮箱 / 手机号）登录
+
+  官网下载页（直链失效时回退到这里）：
+    https://support.futunn.com/topic464?lang=zh-cn&from_platform=1
+
+  - 只从富途官网下载，不要用第三方下载站 / 网盘里的包
+  - macOS 版是通用二进制，本身就同时支持 Intel 和 M 系列，不需要另找 ARM 版
+  - 富途 OpenD 不需要 API Key，但需要一个富途账号（牛牛号 / 邮箱 / 手机号）登录
 
 【重要：项目路径】
 本文档中 PROJECT_ROOT 代表 PA_Agent 项目的根目录。
@@ -253,68 +254,103 @@
   同时按第四步重新下载最新版 OpenD。
 
 ================================================================
-  第四步：安装并登录富途 OpenD（需要用户配合，务必耐心引导）
+  第四步：Agent 下载安装富途 OpenD，并打开到登录界面
 ================================================================
 
-本步骤需要用户在自己的 Mac 上操作（下载、安装、登录）。Agent 的职责：
-  1) 把富途官网下载地址发给用户，并说明要下载 MacOS 版（可视化 OpenD）
-  2) 指导用户安装、处理 macOS 安全拦截、完成登录
-  3) 用命令验收 OpenD 是否已启动并登录成功
+本步骤由 Agent 全程执行，不要甩给用户：下载 → 解压 → 取可视化 GUI 版 → 装到
+"应用程序" → 打开到登录界面。装好后只让用户做一件事：输入富途账号密码点登录。
 
-4.1 把下载地址发给用户（必须用官网）
+【先记住两点，能避开最大的两个坑】
+1) 官方 Mac 包是通用二进制，本身就同时支持 Intel 和 M 系列（ARM），
+   不需要另找"ARM 专用版"——那种东西不存在，别去找。
+2) 官方 tar.gz 里同时含"可视化 GUI 版"和"命令行版"，要装的是 GUI 版
+   （里面是 .dmg）。装错成命令行版的话，用户看到的是黑框命令行、没有登录界面。
 
-  官网下载页（把这个链接发给用户）：
-    https://support.futunn.com/topic464?lang=zh-cn&from_platform=1
-  → 打开后在页面中选择 MacOS 版 OpenD 下载（可视化 OpenD）
+----------------------------------------------------------------
+4.1 Agent 下载
+----------------------------------------------------------------
 
-  官方直链（自动指向最新版，用户找不到按钮时可用）：
-    https://www.futunn.com/download/fetch-lasted-link?name=opend-macos
+  curl -L --fail --retry 3 -o /tmp/futu_opend_mac.tar.gz \
+       "https://www.futunn.com/download/fetch-lasted-link?name=opend-macos"
 
-  提醒用户：
-  - 只从富途官网下载，不要使用第三方来源的安装包
-  - 下载到"下载 / Downloads"目录即可，安装包是一个压缩包
+约 400MB，需要等几分钟。下载完确认下到的是完整压缩包：
 
-4.2 安装（可视化 OpenD）
+  ls -la /tmp/futu_opend_mac.tar.gz
 
-  - 解压下载得到的压缩包，得到 .dmg 安装镜像
-  - 双击 .dmg，把 "Futu_OpenD"（可视化 OpenD）拖入"应用程序 / Applications"
-  - 安装完成后推出（卸载）该磁盘镜像
+若 curl 报 404 / 下载失败，说明直链变了：改用官网下载页，把链接发给用户，
+请他下载 MacOS 版（可视化 OpenD）后把文件路径告诉你，再继续 4.2：
+  https://support.futunn.com/topic464?lang=zh-cn&from_platform=1
 
-  macOS 首次打开被安全策略拦截时的处理：
-  - 提示"无法验证开发者 / 来自身份不明的开发者"：
-    右键（或 Control+点击）应用图标 → 打开 → 在弹窗中点"打开"
-    或：系统设置 → 隐私与安全性 → 找到被拦截的提示 → 点"仍要打开"
-  - 提示"已损坏，无法打开"（网络下载文件被加了隔离属性）：
-    终端执行（应用名以 /Applications 下实际名称为准，可先 ls /Applications 查看）：
-      xattr -dr com.apple.quarantine "/Applications/Futu_OpenD.app"
-    然后重新右键 → 打开
+----------------------------------------------------------------
+4.2 Agent 解压并安装（认准 GUI 版）
+----------------------------------------------------------------
 
-  说明：本方案要求使用"可视化 OpenD"（带图形界面，可登录、可改端口）。
-  命令行版（FutuOpenD，无图形界面）在 macOS 上有已知问题：OpenD.app 运行时会被
-  系统分配到随机路径，导致读不到同目录的 FutuOpenD.xml 配置，需要执行解压包中的
-  fixrun.sh，或用 -cfg_file 指定配置文件的绝对路径。除用户明确要求挂机场景外，
-  不要引导用户使用命令行版。
+  mkdir -p /tmp/futu_opend && tar xzf /tmp/futu_opend_mac.tar.gz -C /tmp/futu_opend
+  find /tmp/futu_opend -maxdepth 2 -not -name "._*"
 
-4.3 启动并登录 OpenD
+会看到两个并列目录，版本号以实际为准：
 
-  1) 在"应用程序"中打开 Futu_OpenD
-  2) 确认界面右侧的启动配置（默认值即与本程序一致）：
-       监听地址：127.0.0.1
-       API 端口：11111
-     若用户改过端口，请记下实际端口，稍后在 PA Agent 设置里填相同端口
-  3) 输入富途账号（牛牛号 / 邮箱 / 手机号）与密码，点击登录
-     - 手机号登录时按提示填写国家/地区代码
-     - 首次登录需要先完成"问卷评估与协议确认"，完成后重新登录即可
-  4) 登录成功后界面会显示账号信息与"行情权限"
+  Futu_OpenD-GUI_<版本>_Mac/    ← 可视化版（要装这个，里面是 .dmg）
+  Futu_OpenD_<版本>_Mac/        ← 命令行版（不要装）
 
-4.4 验收：确认 OpenD 已在监听、SDK 能连上（Agent 执行）
+挂载 GUI 版的 dmg 并装进"应用程序"：
+
+  DMG=$(ls /tmp/futu_opend/Futu_OpenD_*/Futu_OpenD-GUI_*/*.dmg | head -1)
+  hdiutil attach "$DMG" -nobrowse
+  SRC=$(ls -d /Volumes/Futu_OpenD-GUI_*/*.app | head -1)
+  rm -rf "/Applications/$(basename "$SRC")"
+  cp -R "$SRC" /Applications/
+  xattr -dr com.apple.quarantine "/Applications/$(basename "$SRC")"
+  hdiutil detach /Volumes/Futu_OpenD-GUI_* -quiet
+
+验收：确认装进去的是 GUI 应用
+
+  ls -d /Applications/Futu*.app
+
+预期输出形如 /Applications/Futu_OpenD-GUI_<版本>_Mac.app。
+如果 /Applications 里出现的是不带 GUI 前缀的 FutuOpenD.app，就是装错成命令行版了：
+删掉它（rm -rf /Applications/FutuOpenD.app），回到 4.2 开头确认取的是
+Futu_OpenD-GUI_* 那个目录下的 .dmg，重装一次。
+
+----------------------------------------------------------------
+4.3 Agent 打开到登录界面
+----------------------------------------------------------------
+
+  APP=$(ls -d /Applications/Futu*.app | head -1)
+  open "$APP"
+
+预期：OpenD 图形界面弹出，停在登录界面。
+
+若被 macOS 拦（提示"无法验证开发者"/"已损坏，无法打开"），先清隔离属性再开；
+仍被拦就让用户右键（Control+点击）应用 → 打开 → 打开：
+
+  xattr -dr com.apple.quarantine "$APP" && open "$APP"
+
+若弹窗要求输入 Mac 开机密码授权，让用户输一下（系统行为，Agent 无法代填）。
+
+----------------------------------------------------------------
+4.4 让用户登录（唯一必须用户本人做的一步）
+----------------------------------------------------------------
+
+对用户说：
+"富途 OpenD 已经装好并打开了，请在刚弹出的窗口里输入富途账号（牛牛号 / 邮箱 /
+手机号）和密码点登录；手机号登录要选国家地区代码（大陆 +86）；如果提示要短信
+验证码就填一下；如果这个账号第一次在本机登录，会先让你做一次问卷评估与协议确认，
+做完再点一次登录。登录成功后窗口会显示账号信息和'行情权限'，你跟我说一声。"
+
+提醒用户：这个窗口在跑 PA Agent 期间一直开着；本程序只要"行情"能力，不要做交易解锁。
+
+----------------------------------------------------------------
+4.5 Agent 验收：已登录且能连上
+----------------------------------------------------------------
 
   lsof -nP -iTCP:11111 -sTCP:LISTEN
 
-  预期输出：有进程（Futu_OpenD 相关）在 11111 端口 LISTEN。
-  若无任何输出，说明 OpenD 未启动或端口不一致，见故障排查 4.1。
+预期：有进程在 11111 端口 LISTEN。没有输出通常是用户还没登录成功（登录前不监听），
+或窗口被关了，回 4.3 / 4.4 处理；也可能是端口被改过，要让用户在 OpenD 界面确认
+"API 端口"是 11111、"监听地址"是 127.0.0.1（改过就在 PA Agent 设置里填成一致）。
 
-  再确认 Python SDK 能连上 OpenD 并已登录行情：
+再确认 SDK 能连上并已登录行情：
 
   python3 -c "
 from futu import OpenQuoteContext
@@ -325,71 +361,21 @@ print('data =', data)
 ctx.close()
 "
 
-  预期：ret = 0（RET_OK），data 中 qot_logined 为 True（行情已登录）。
-  若报 "No module named 'futu'"，回第三步安装 futu-api。
-  若提示连接失败，回 4.3 确认 OpenD 已启动并登录。
-
-4.5 注意事项
-
-  - OpenD 必须先启动并登录，PA Agent 才能取到数据；程序运行期间请保持 OpenD 开启
-  - 即使 OpenD 没启动，PA Agent 也能正常打开（只会在日志里记一条警告），但界面上
-    拉不到任何 K 线，所以务必先完成本步骤再进入第七步验收
-  - 本部署只需要 OpenD 的"行情"能力，不需要做交易解锁，也不要引导用户配置交易相关项
-  - 行情权限：某个市场没有权限时，该市场的 K 线会拉取失败（报订阅 / 权限错误）。
-    行情权限可在 OpenD 界面查看，官方说明：
-    https://openapi.futunn.com/futu-api-doc/intro/authority.html
-  - 验收建议使用有权限的市场品种，例如 A 股 SH.600519、港股 HK.00700、美股 US.AAPL
+预期：ret = 0，data 中 qot_logined 为 True。
+若报 No module named 'futu'，回第三步装 futu-api。
 
 【故障排查】
-
-问题 4.1：lsof 没有输出 / 连接被拒绝（Connection refused）
-原因：OpenD 未启动，或端口不是 11111，或监听地址被改
-解决：
-  1) 确认 Futu_OpenD 正在运行（Dock 中有图标、窗口未关闭）
-  2) 确认 OpenD 界面右侧"API 端口"是 11111、"监听地址"是 127.0.0.1
-  3) 若用户改过端口，把 PA Agent 的端口改成一致：
-     GUI 设置页 → Futu OpenD → 主机 / 端口
-     （对应 config/settings.json 中的 futu.opend_host / futu.opend_port）
-  4) 重新执行 lsof 命令确认监听成功
-
-问题 4.2：报错"未安装 futu-api。请使用项目环境执行: pip install futu-api"
-解决：
-  pip3 install futu-api -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn
-
-问题 4.3：报错"无法连接富途 OpenD (127.0.0.1:11111)：…。请启动并登录 OpenD。"
-解决：按 4.3 启动并登录 OpenD，然后重新验收（4.4）
-
-问题 4.4：OpenD 已启动但拉不到数据（订阅失败 / 无权限 / 返回错误）
-原因：行情权限不足；OpenD 未登录行情；或账号行情权限被其他设备抢占
-解决：
-  1) 在 OpenD 界面确认已登录，且能看到"行情权限"
-  2) 换一个有权限的品种测试：SH.600519（A股）/ HK.00700（港股）/ US.AAPL（美股）
-  3) 富途对同一账号的行情权限有抢占机制：若账号在手机 / 牛牛客户端被顶号登录，
-     OpenD 会掉线，请重新登录并保持 OpenD 独占行情
-
-问题 4.5：macOS 提示"无法验证开发者""来自身份不明的开发者""已损坏，无法打开"
-解决：
-  右键（Control+点击）应用 → 打开 → 打开
-  若提示已损坏：
-    xattr -dr com.apple.quarantine "/Applications/Futu_OpenD.app"
-  （应用名以 /Applications 下的实际名称为准）
-
-问题 4.6：端口 11111 被占用
-解决：
-  lsof -nP -iTCP:11111 -sTCP:LISTEN     # 查看占用进程
-  在 OpenD 界面把 API 端口改成其他值（如 11112），并在 PA Agent 设置里填相同端口
-
-问题 4.7：OpenD 一直提示登录失败 / 未登录
-解决：
-  - 手机号登录需要国家/地区代码（如 +86）
-  - 首次登录需先完成问卷评估与协议确认，完成后重新登录
-  - 确认账号密码正确，且账号未被其他设备顶号
-
-问题 4.8：用户不想安装 OpenD
-解决：可以不装，但默认数据源需要相应改回 TradingView（TradingView 无需本地网关，
-  但国内直连可能不稳定、匿名模式有限流）。做法：跳过第四步，并把第五步中
-  factory.py / settings.py 的默认值改为 "tradingview"、last_symbol 改为 "XAUUSD"，
-  然后按"附：TradingView 备选数据源使用说明"和第三步问题 3.5 / 3.6 处理。
+- 用户看到的是黑框命令行、没有登录界面：装成命令行版了，见 4.2 验收里的纠正办法
+- 拉不到数据 / 订阅失败 / 无权限：在 OpenD 界面确认已登录且有该市场行情权限，
+  换有权限的品种试（SH.600519 / HK.00700 / US.AAPL）；富途行情权限会被其他设备
+  顶号抢占，确认账号没在手机或牛牛客户端同时登录
+- 端口 11111 被占用：在 OpenD 界面改成 11112，并在 PA Agent 设置里填相同端口
+- 登录失败：手机号要带国家代码（+86）；首次登录需先完成问卷评估与协议确认
+- 行情权限说明：https://openapi.futunn.com/futu-api-doc/intro/authority.html
+- 用户不想装 OpenD：可跳过本步改用 TradingView 数据源（无需本地网关，但国内直连
+  可能不稳、匿名模式限流）。做法：跳过第四步，把第五步中 factory.py / settings.py
+  的默认值改成 "tradingview"、last_symbol 改成 "XAUUSD"，并按"附：TradingView
+  备选数据源使用说明"与第三步问题 3.5 / 3.6 处理。
 
 ================================================================
   第五步：修改项目代码，使 Mac 默认使用富途 OpenD
@@ -489,7 +475,7 @@ Mac 版需要修改以下文件，使程序默认使用"富途 OpenD"数据源�
 
 问题 5.3：程序能打开但一直取不到数据
 原因：OpenD 未启动 / 未登录，或端口不一致
-解决：见第四步故障排查 4.1 / 4.3 / 4.4
+解决：见第四步故障排查 4.1（未登录 / 未启动）、4.3、4.4
 
 ================================================================
   第六步：生成运行智能体.command 到项目根目录
@@ -556,7 +542,7 @@ EOF
 
 7.2 富途 OpenD 连通性与 K 线验收（关键）
 
-  先确认 OpenD 在监听（第四步 4.4 的命令再执行一次）：
+  先确认 OpenD 在监听（第四步 4.6 的命令再执行一次）：
 
     lsof -nP -iTCP:11111 -sTCP:LISTEN
 
@@ -576,8 +562,8 @@ src.disconnect()
 "
 
   预期输出：FUTU OK: 2 bars <某个价格>
-  若失败，按报错对照第四步故障排查处理
-  （OpenD 未启动 4.1、未安装 futu-api 4.2、未登录 4.3、无行情权限 4.4）。
+  若失败，按报错对照第四步故障排查处理（未登录 / 未启动、未安装 futu-api、
+  未登录行情、无行情权限）。
 
 7.3 启动程序（命令行方式，确认能正常初始化）
 
@@ -602,17 +588,226 @@ src.disconnect()
 
   [ ] python3 --version 输出 3.11+
   [ ] 所有核心包导入测试通过（14 个 OK，含 futu-api；不含 MetaTrader5 和 pywin32）
-  [ ] 富途 OpenD 已安装、已启动、已登录：
-      lsof -nP -iTCP:11111 -sTCP:LISTEN 有输出（LISTEN）
+  [ ] 富途 OpenD 已由 Agent 装好并打开到登录界面，且是可视化 GUI 版
+      （ls -d /Applications/Futu*.app 能列出 Futu_OpenD-GUI_*）
+  [ ] 富途 OpenD 已登录：lsof -nP -iTCP:11111 -sTCP:LISTEN 有输出（LISTEN）
   [ ] 富途 K 线验收通过：7.2 输出 FUTU OK: 2 bars …（若失败，见第四步故障排查）
   [ ] python3 -c "from pa_agent.main import main; print('Import OK')" 输出 Import OK
   [ ] python3 run.py 窗口正常弹出
+  [ ] 【Mac 必查】窗口顶部「设置栏」完整显示：能看到「AI 模型设置」
+      「飞书发送通知设置」「其他通用设置」三个入口，且点击均能弹出对话框
+      （M 系列芯片务必逐一点击确认；未通过见【附加必做：Mac 顶栏「设置栏」
+      显示适配】章节，改代码后重新验收）
   [ ] 运行智能体.command 双击窗口正常弹出
   [ ] 控制台无 ImportError / ModuleNotFoundError
   [ ] 数据源默认为 Futu（富途 OpenD），非 MT5 / TradingView
 
 全部通过 → 部署成功，可交付用户。
 任一项失败 → 根据错误信息对照故障排查章节修复后重新验收。
+
+================================================================
+  附加必做：Mac 顶栏「设置栏」显示适配（M 系列芯片重点检查）
+================================================================
+
+【结论先行】
+M 系列芯片（Apple Silicon / ARM64）Mac 上，程序可以正常启动运行，
+但窗口顶部那一栏「AI 模型设置 / 飞书发送通知设置 / 其他通用设置」在窗口里
+完全不显示。这不是代码没写完，而是 PyQt6 在 macOS 上的菜单栏原生接管行为导致的。
+Agent 必须在交付前主动检查并修复，否则用户会找不到任何设置入口。
+
+【实测环境】
+- 机型：MacBook Air（M2 / Apple Silicon，ARM64）
+- 现象：程序正常运行、图表与 AI 面板均正常，唯独顶栏「设置栏」整片不显示
+- 处理：由 Agent 修改代码适配后，界面可完整显示
+- 结论：这是 Mac（尤其是 M 系列 ARM 机型）的必做适配项，不是可选优化
+
+【用户看到的现象】
+窗口顶部看不到「AI 模型设置」「飞书发送通知设置」「其他通用设置」这三个入口。
+用户的主观描述通常是：
+- "顶栏的设置栏不显示"
+- "不知道是被遮挡了，还是那一片直接不显示了"
+- "找不到改 API Key 的地方"
+注意：用户表述里"被遮挡"和"整片消失"两种猜测其实都指向同一根因，
+不要纠结于字面描述，直接定位到下面【根本原因】执行修复。
+
+----------------------------------------------------------------
+【根本原因】—— 必须先理解，再动手
+----------------------------------------------------------------
+
+三个"设置栏"入口是用 QMenuBar + QAction 构建的，位置在：
+
+  pa_agent/gui/workspace_window.py
+      _build_menu()            ← 自选股主窗口（用户日常打开的是这个）
+      self.menuBar().addAction(QAction("AI 模型设置"))
+      self.menuBar().addAction(QAction("飞书发送通知设置"))
+      self.menuBar().addAction(QAction("其他通用设置"))
+
+  pa_agent/gui/main_window.py
+      _setup_ui() 末尾的 "── Menu bar ──" 段落，同上三个 QAction
+
+关键点：在 macOS 上，Qt 默认会把 QMenuBar 从窗口内部"搬走"，
+交给系统顶部的全局菜单栏（屏幕最上方那条 Apple 菜单栏）显示，
+这个行为叫"原生菜单栏"（native menu bar / global menu bar）。
+macOS 只在应用处于前台且激活时，才把菜单项渲染到屏幕顶部。
+因此必然出现下面两种结果之一：
+
+  结果 A：菜单项跑到了屏幕最顶部的系统菜单栏里，窗口内部那一栏变成空白
+          → 用户以为"顶栏不显示了"
+  结果 B：进程没有被识别为标准 GUI 应用（比如从非 .app 方式、从终端或
+          .command 启动，且未设置 applicationName），系统菜单栏没有正确
+          接管，菜单项哪儿都不显示
+          → 用户以为"那一片直接不显示了"
+
+不管哪种，表现都是"顶栏设置栏看不到"。这就是为什么用户说不清是遮挡还是消失。
+
+----------------------------------------------------------------
+【修复方案】—— 强制菜单栏回到窗口内部显示
+----------------------------------------------------------------
+
+修复思路：显式关闭 Qt 的原生菜单栏行为，让菜单栏老老实实待在窗口内部，
+在所有平台（含 macOS ARM）上表现一致。
+
+推荐做法（最干净、一行搞定、全局生效）：
+在程序最开始、创建 QApplication 之前，设置应用级属性。
+
+5A 修改 pa_agent/main.py（或项目实际的 GUI 入口文件，即 import PyQt6 的那个）
+
+  在 import 区加入：
+
+    import sys
+    from PyQt6.QtCore import Qt
+
+  在创建 QApplication 实例之前（必须之前，之后设置无效）加入：
+
+    # macOS：禁用原生菜单栏，让「AI 模型设置 / 飞书发送通知设置 / 其他通用设置」
+    # 这几个入口保持在窗口内部显示，而不是被系统搬到屏幕顶部的全局菜单栏。
+    QApplication.setAttribute(
+        Qt.ApplicationAttribute.AA_DontUseNativeMenuBar, True
+    )
+
+  典型上下文长这样：
+
+    app = QApplication(sys.argv)          ← 后面加下面这行也不行，必须在这行之前
+    app.setApplicationName("PA Agent")
+
+  正确写法：
+
+    QApplication.setAttribute(Qt.ApplicationAttribute.AA_DontUseNativeMenuBar, True)
+    app = QApplication(sys.argv)
+    app.setApplicationName("PA Agent")
+
+如果 5A 因为入口文件结构特殊不方便改，用下面的兜底做法（两个窗口各改一处）：
+
+5B-1 修改 pa_agent/gui/workspace_window.py 的 _build_menu()
+
+  找到：
+    def _build_menu(self) -> None:
+        menu = self.menuBar()
+        ai_action = QAction("AI 模型设置", self)
+
+  改为：
+    def _build_menu(self) -> None:
+        menu = self.menuBar()
+        # macOS：菜单项必须留在窗口内部。不关闭原生菜单栏时，Qt 会把
+        # 这三个设置入口搬到系统全局菜单栏，窗口顶部会变成一片空白。
+        menu.setNativeMenuBar(False)
+        ai_action = QAction("AI 模型设置", self)
+
+  即：在 menu = self.menuBar() 之后立刻补一行 menu.setNativeMenuBar(False)
+
+5B-2 修改 pa_agent/gui/main_window.py 的菜单栏段落
+
+  找到（_setup_ui() 末尾）：
+        menu_bar: QMenuBar = self.menuBar()  # type: ignore[assignment]
+
+        # 1. AI 模型设置 — 点击直接弹对话框（无下拉）
+
+  改为：
+        menu_bar: QMenuBar = self.menuBar()  # type: ignore[assignment]
+        # macOS：同上，禁用原生菜单栏，保证设置入口显示在窗口内部。
+        menu_bar.setNativeMenuBar(False)
+
+        # 1. AI 模型设置 — 点击直接弹对话框（无下拉）
+
+  即：在 menu_bar = self.menuBar() 之后立刻补一行 menu_bar.setNativeMenuBar(False)
+
+说明：5A 与 5B 二者选一即可，不要重复加。推荐 5A（覆盖面最全）；
+如果 5A 改了仍无效，再加 5B 作为双保险。
+
+----------------------------------------------------------------
+【验证方法】—— 必须实际看到菜单项才算通过
+----------------------------------------------------------------
+
+改完后，用命令行方式启动，确认窗口内部顶部出现三个入口：
+
+  cd PROJECT_ROOT
+  python3 run.py
+
+验收标准（逐条肉眼确认，不能只看是否报错）：
+  [ ] 窗口内部顶部能看到「AI 模型设置」按钮
+  [ ] 窗口内部顶部能看到「飞书发送通知设置」按钮
+  [ ] 窗口内部顶部能看到「其他通用设置」按钮
+  [ ] 点击「AI 模型设置」，能正常弹出对话框且内容完整
+  [ ] 点击「其他通用设置」，能正常弹出对话框且内容完整
+
+注意：这一步必须在 Mac 上人工目视验收。
+  只运行 python3 -c "from pa_agent.main import main" 无法发现本问题，
+  因为它是纯运行时/平台渲染问题，导入检查一定会通过。
+
+可选：如果修复后仍看不到，用下面的命令确认菜单栏对象确实存在、
+        只是显示位置不对（能打印出三个按钮文字，就说明是显示位置问题）：
+
+  cd PROJECT_ROOT
+  python3 -c "
+import sys
+from PyQt6.QtWidgets import QApplication
+from PyQt6.QtCore import Qt
+QApplication.setAttribute(Qt.ApplicationAttribute.AA_DontUseNativeMenuBar, True)
+app = QApplication(sys.argv)
+from pa_agent.gui.workspace_window import WorkspaceWindow
+w = WorkspaceWindow.__new__(WorkspaceWindow)
+"
+  （若上面不方便构造，直接在 run.py 启动后看界面即可，不必强求这条）
+
+----------------------------------------------------------------
+【故障排查】
+----------------------------------------------------------------
+
+问题 A1：已加 AA_DontUseNativeMenuBar，但窗口顶部仍是空白
+原因 1：setAttribute 写在了 QApplication(...) 之后 —— 属性必须在实例化之前设置
+解决  ：把 setAttribute 移到 app = QApplication(sys.argv) 之前
+原因 2：入口文件不是 pa_agent/main.py，改了没生效的文件
+解决  ：搜索真正的入口：
+        grep -rn "QApplication(" PROJECT_ROOT/pa_agent
+        在创建 QApplication 的那个文件里加
+原因 3：外加 5B 后仍无效
+解决  ：把 5A 和 5B 同时加上（一个管应用级、一个管窗口级），仍无效时
+        在启动前设环境变量验证：
+          export QT_MAC_DISABLE_NATIVE_MENUBAR=1
+          python3 run.py
+        若这样能显示，说明确实只是原生菜单栏接管问题，回查上面的改动是否生效。
+
+问题 A2：菜单栏显示了，但按钮点击没反应 / 对话框弹不出来
+原因：这一步不是平台问题，是信号连接断了
+解决：检查 _build_menu() / _setup_ui() 中 QAction.triggered.connect(...)
+      是否被注释或改动，确认连接的是 _open_ai_model_settings /
+      _open_feishu_settings / _open_general_settings（主窗口侧为
+      _open_ai_model_settings_dialog 等），不要误删
+
+问题 A3：三个入口显示了，但被图表区域压住 / 只露出一部分
+原因：菜单栏虽然回到窗口内部，但中央控件高度把位置挤掉了
+解决：本项目的窗口尺寸已按屏幕可用区域计算（WorkspaceWindow 用
+      screen.availableGeometry() 的 90% × 85%），一般不会发生；
+      若确有，检查是否被 setMenuWidget / 自定义标题栏覆盖，
+      或确认没有给 centralWidget 设置过大的 minimumHeight
+
+问题 A4：双击 .command 启动时菜单栏消失，但终端 sudo python3 run.py 启动时正常
+原因：这是 macOS 对"未做 .app 打包的脚本应用"的典型差异，与原生菜单栏
+      接管逻辑叠加导致
+解决：加 5A 的应用级属性即可解决；同时建议在入口文件里补一行：
+        app.setApplicationName("PA Agent")
+        app.setApplicationDisplayName("PA Agent")
+      让系统正确识别本进程为 GUI 应用
 
 ================================================================
   附：配置 API Key 与 OpenD 参数（用户首次使用时需操作）
@@ -718,6 +913,24 @@ API Key 会被存储在 config/settings.json 中。
   附：Mac 特有问题
 ================================================================
 
+Q: 窗口顶部的「设置栏」不显示（看不到 AI 模型设置 / 飞书发送通知设置 / 其他通用设置）
+A: 这是 Mac（尤其 M 系列 Apple Silicon 机型）的已知适配问题，必须改代码后才会正常显示。
+   现象：程序能正常打开、图表和 AI 面板都正常，但窗口顶部那一栏三个设置入口
+   整片看不到（用户容易描述成"被遮挡了"或者"那一片直接不显示了"，其实是同一原因）。
+   原因：这三个入口是 QMenuBar 实现的，macOS 上 Qt 默认会把菜单栏搬去屏幕最顶部的
+   系统全局菜单栏，导致窗口内部那一栏变空，或系统未接管时哪儿都不显示。
+   解决：让 Agent 按正文【附加必做：Mac 顶栏「设置栏」显示适配】章节处理，核心是在
+   创建 QApplication 之前加一行：
+     QApplication.setAttribute(Qt.ApplicationAttribute.AA_DontUseNativeMenuBar, True)
+   并在 workspace_window.py 的 _build_menu()（以及 main_window.py 的菜单栏段落）中
+   补一行 menu.setNativeMenuBar(False)。改完后窗口内部顶部即可看到三个设置入口。
+   验证：改完必须人工肉眼确认三个按钮都出现、点击都能弹出对话框——
+   只做 import 检查发现不了这个问题。
+
+Q: 找不到修改 DeepSeek API Key 的地方
+A: 入口在窗口顶部那一栏的「AI 模型设置」按钮里。如果看不到这一栏，
+   先按上一条（顶栏设置栏不显示）处理，修复后即可点击进入。
+
 Q: macOS 上没有 MT5，怎么办？
 A: Mac 版不使用 MT5，默认使用富途 OpenD 作为数据源（富途官方本地行情网关，
    Mac 原生支持），覆盖 A 股、港股、美股等市场。
@@ -725,15 +938,29 @@ A: Mac 版不使用 MT5，默认使用富途 OpenD 作为数据源（富途官�
    如果必须使用 MT5，可以通过虚拟机（Parallels Desktop / VMware Fusion）运行 Windows。
 
 Q: 富途 OpenD 是什么？必须装吗？
-A: 是富途官方提供的本地行情网关。Mac 版默认数据源就是它，所以必须由用户先安装、
-   启动并登录，程序才能取到 K 线。只能从富途官网下载：
-   https://support.futunn.com/topic464?lang=zh-cn&from_platform=1
-   如果用户不愿意安装，可改用 TradingView 数据源（见第五步故障排查 4.8）。
+A: 是富途官方提供的本地行情网关。Mac 版默认数据源就是它，所以必须先装好、启动并登录，
+   程序才能取到 K 线。安装由 Agent 自动完成（见第四步），用户只需要在登录界面
+   输入富途账号密码点登录。
+   如果用户不愿意装，可改用 TradingView 数据源（见第四步故障排查最后一条）。
+
+Q: 富途 OpenD 的 M 系列（ARM）版本要去哪里下载？
+A: 不存在单独的 ARM 版本。官方 Mac 包是通用二进制，本身就同时包含 x86_64 与 arm64
+   两套切片，M 系列芯片上会原生运行 arm64，不需要任何额外处理。
+   Agent 直接下 opend-macos 这一个包就行，不要去搜"arm64 专用版"。
 
 Q: 富途 OpenD 提示"无法验证开发者"或"已损坏，无法打开"
-A: 右键（Control+点击）应用 → 打开 → 打开；
-   若提示已损坏，先去掉隔离属性再打开：
-   xattr -dr com.apple.quarantine "/Applications/Futu_OpenD.app"
+A: 先去掉隔离属性再打开（注意应用名以 /Applications 下实际名称为准，GUI 版通常带
+   Futu_OpenD-GUI_ 前缀）：
+   APP=$(ls -d /Applications/Futu*.app | head -1)
+   xattr -dr com.apple.quarantine "$APP"
+   open "$APP"
+   若仍被拦：右键（Control+点击）应用 → 打开 → 打开。
+
+Q: 装完之后只有黑框命令行，没有登录界面
+A: 装成命令行版了。官方包里有"可视化 GUI 版"和"命令行版"两个文件夹，可视化版才是
+   带登录界面的（安装包是 .dmg）。删掉装错的再重装：
+   rm -rf /Applications/FutuOpenD.app
+   然后按第四步 4.2，取 Futu_OpenD-GUI_* 目录下的 .dmg 安装。
 
 Q: OpenD 显示已登录，但程序里拉不到数据
 A: 按顺序检查：

@@ -47,7 +47,7 @@ def test_windows_caption_style_uses_requested_caption_and_white_text(monkeypatch
     assert colors == [0x00100D0B, 0x00100D0B]
 
 
-def test_main_window_caption_identity_is_hidden_without_affecting_dialogs(qtbot, monkeypatch) -> None:
+def test_main_window_caption_text_is_hidden_without_replacing_icons(qtbot, monkeypatch) -> None:
     theme_apply = import_module("pa_agent.gui.theme.apply")
     main_window = QMainWindow()
     dialog = QDialog()
@@ -61,12 +61,36 @@ def test_main_window_caption_identity_is_hidden_without_affecting_dialogs(qtbot,
         MagicMock(user32=user32),
         raising=False,
     )
-    monkeypatch.setattr(theme_apply, "_transparent_window_icon_handle", lambda: 123)
 
-    theme_apply._hide_windows_main_window_caption_identity(main_window)
-    theme_apply._hide_windows_main_window_caption_identity(dialog)
+    theme_apply._hide_windows_main_window_caption_text(main_window)
+    theme_apply._hide_windows_main_window_caption_text(dialog)
 
     user32.SetWindowTextW.assert_called_once()
-    assert user32.SendMessageW.call_count == 2
-    assert [call.args[2] for call in user32.SendMessageW.call_args_list] == [0, 1]
-    assert [call.args[3] for call in user32.SendMessageW.call_args_list] == [123, 123]
+    user32.SendMessageW.assert_not_called()
+
+
+def test_application_icon_survives_theme_and_window_reshow(qtbot, monkeypatch) -> None:
+    from pa_agent.util.app_icon import install_app_icon
+
+    theme_apply = import_module("pa_agent.gui.theme.apply")
+    app = QApplication.instance()
+    assert app is not None
+    icon = install_app_icon(app)
+    assert not icon.isNull()
+    window = QMainWindow()
+    qtbot.addWidget(window)
+    user32 = MagicMock()
+    monkeypatch.setattr(theme_apply.sys, "platform", "win32")
+    monkeypatch.setattr(theme_apply.ctypes, "windll", MagicMock(user32=user32), raising=False)
+
+    theme_apply.apply_theme(app)
+    for _ in range(2):
+        window.show()
+        app.processEvents()
+        assert window.windowIcon().cacheKey() == icon.cacheKey()
+        assert not window.windowIcon().pixmap(16, 16).isNull()
+        window.hide()
+    # Qt can still report the correct icon if native WM_SETICON overrides it.
+    # Guard the native boundary as well as the Qt property.
+    user32.SendMessageW.assert_not_called()
+    assert user32.SetWindowTextW.called
